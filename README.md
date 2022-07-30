@@ -1,0 +1,7 @@
+## Kartoza
+
+kartoza
+
+#### License
+
+MIT

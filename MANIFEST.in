@@ -1,0 +1,18 @@
+include MANIFEST.in
+include requirements.txt
+include *.json
+include *.md
+include *.py
+include *.txt
+recursive-include kartoza *.css
+recursive-include kartoza *.csv
+recursive-include kartoza *.html
+recursive-include kartoza *.ico
+recursive-include kartoza *.js
+recursive-include kartoza *.json
+recursive-include kartoza *.md
+recursive-include kartoza *.png
+recursive-include kartoza *.py
+recursive-include kartoza *.svg
+recursive-include kartoza *.txt
+recursive-exclude kartoza *.pyc
