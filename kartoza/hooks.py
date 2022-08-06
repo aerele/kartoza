@@ -81,9 +81,10 @@ app_license = "MIT"
 # ---------------
 # Override standard doctype classes
 
-# override_doctype_class = {
+override_doctype_class = {
+	"Salary Slip": "kartoza.custom_py.salary_slip.CustomSalarySlip"
 # 	"ToDo": "custom_app.overrides.CustomToDo"
-# }
+}
 
 # Document Events
 # ---------------
