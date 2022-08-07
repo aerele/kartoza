@@ -20,7 +20,39 @@ class CustomSalarySlip(SalarySlip):
 		super().set_loan_repayment()
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
-		
+
+	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
+		taxable_income = super().get_taxable_earnings(allow_tax_exemption, based_on_payment_days)
+		ra = get_retirement_annuity(self, taxable_income.taxable_earnings * 12)
+		ra_amount = taxable_income.taxable_earnings * ra.ra_percent / 100
+		ra_amount += ra.ra_amount
+		if ra_amount * 12 > ra.limit_value:
+			ra_amount = ra.limit_value / 12
+		ra_percent = ra_amount / taxable_income.taxable_earnings *100
+		if ra_percent > ra.limit_percent:
+			ra_percent = ra.limit_percent
+		ra_amount = ra_percent * taxable_income.taxable_earnings / 100
+		taxable_income.taxable_earnings -= ra_amount
+		return taxable_income
+
+def get_retirement_annuity(self, amount):
+	ra = frappe.db.get_value("Retirement Annuity", {"effective_from":["<=", self.start_date], "disable":0})
+	res = frappe._dict({})
+	if ra:
+		ra = frappe.get_doc("Retirement Annuity", ra)
+		res['limit_value'] = ra.maximum_amount
+		res['limit_percent'] = ra.maximum_
+		for i in ra.slab:
+			if i.to_amount == 0 and i.from_amount <= amount:
+
+				res["ra_amount"] = i.amount
+				res["ra_percent"] = i.percentage
+			elif i.from_amount <= amount and i.to_amount >= amount:
+				res["ra_amount"] = i.amount
+				res["ra_percent"] = i.percentage
+	return res
+
+
 
 
 def get_medical_aid(dependant):
