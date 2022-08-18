@@ -10,11 +10,12 @@ class CustomSalarySlip(SalarySlip):
 		medical_aid = 0
 		tax_rebate = 0
 		if dependant:
-			medical_aid = get_medical_aid(dependant)
+			medical_aid = get_medical_aid(dependant,self.start_date)
 		if dob:
-			tax_rebate = get_tax_rebate(dob)
+			tax_rebate = get_tax_rebate(dob,self.start_date)
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component"):
+				self.tax_value = self.deductions[i.idx-1].amount
 				self.deductions[i.idx-1].amount -= (medical_aid + tax_rebate)
 				self.tax_rebate = tax_rebate
 				self.medical_aid = medical_aid
@@ -35,21 +36,21 @@ class CustomSalarySlip(SalarySlip):
 		return taxable_income
 
 def get_retirement_annuity(self):
-	ra = frappe.db.get_value("Retirement Annuity", {"effective_from":["<=", self.start_date], "disable":0, "employee":self.employee})
+	ra = frappe.db.get_value("Retirement Annuity", {"from_date":[">=", self.start_date], "to_date":["<=", self.start_date] ,"disable":0, "employee":self.employee})
 	res = frappe._dict({})
 	if ra:
 		ra = frappe.get_doc("Retirement Annuity", ra)
 		res['limit_percent'] = ra.maximum_
 		res["ra_amount"] = ra.annuity_amount
-		if (ra.maximum_amount // 12) > ra.annuity_amount:
+		if (ra.maximum_amount // 12) < ra.annuity_amount:
 			res["ra_amount"] = ra.maximum_amount // 12
 	return res
 
 
 
 
-def get_medical_aid(dependant):
-	cur_year = date.today().year
+def get_medical_aid(dependant , date):
+	cur_year = date.year
 	name = frappe.db.get_value("Medical Tax Credit Rate", {"year":cur_year})
 	if name:
 		doc = frappe.get_doc("Medical Tax Credit Rate", name)
@@ -63,8 +64,8 @@ def get_medical_aid(dependant):
 	return 0
 
 
-def get_tax_rebate(dob):
-	cur_year = date.today().year
+def get_tax_rebate(dob,date):
+	cur_year = date.year
 	if isinstance(dob, str):
 		dob = datetime.strptime(dob,"%y-%m-%d")
 	today = date.today()
