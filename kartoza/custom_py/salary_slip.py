@@ -28,8 +28,8 @@ class CustomSalarySlip(SalarySlip):
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
 
-	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
-		taxable_income = super().get_taxable_earnings(allow_tax_exemption, based_on_payment_days)
+	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0, payroll_period=None):
+		taxable_income = super().get_taxable_earnings(allow_tax_exemption, based_on_payment_days, payroll_period=None)
 		ra = get_retirement_annuity(self)
 		if ra:
 			ra_percent = ra.ra_amount / taxable_income.taxable_earnings * 100
