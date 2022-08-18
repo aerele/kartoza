@@ -13,9 +13,9 @@ class CustomSalarySlip(SalarySlip):
 			medical_aid = get_medical_aid(dependant,self.start_date)
 		if dob:
 			tax_rebate = get_tax_rebate(dob,self.start_date)
-		earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings"))
+		earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings") or 0)
 		if not earning_limit:
-			frappe.throw("Set Earning Limit in HR Setting to calculate Deduction")
+			frappe.throw("Set Earning Limit in HR Setting to Calculate Deduction")
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component"):
 				self.tax_value = self.deductions[i.idx-1].amount
