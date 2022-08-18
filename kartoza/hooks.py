@@ -31,7 +31,7 @@ app_license = "MIT"
 # page_js = {"page" : "public/js/file.js"}
 
 # include js in doctype views
-# doctype_js = {"doctype" : "public/js/doctype.js"}
+doctype_js = {"Employee Benefit Claim" : "custom_js/employee_benefit_claim.js"}
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
@@ -57,6 +57,7 @@ app_license = "MIT"
 # ------------
 
 # before_install = "kartoza.install.before_install"
+after_install = "kartoza.install.after_install"
 # after_install = "kartoza.install.after_install"
 
 # Desk Notifications
