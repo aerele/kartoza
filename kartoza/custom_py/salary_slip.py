@@ -13,11 +13,16 @@ class CustomSalarySlip(SalarySlip):
 			medical_aid = get_medical_aid(dependant)
 		if dob:
 			tax_rebate = get_tax_rebate(dob)
+		earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings"))
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component"):
 				self.deductions[i.idx-1].amount -= (medical_aid + tax_rebate)
 				self.tax_rebate = tax_rebate
 				self.medical_aid = medical_aid
+			if "4141" in i.salary_component:
+				self.deductions[i.idx-1].amount = self.gross_pay / 100 if earning_limit > self.gross_pay else earning_limit / 100
+
+		# for i in self.
 		super().set_loan_repayment()
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
@@ -41,12 +46,9 @@ def get_retirement_annuity(self):
 		ra = frappe.get_doc("Retirement Annuity", ra)
 		res['limit_percent'] = ra.maximum_
 		res["ra_amount"] = ra.annuity_amount
-		if (ra.maximum_amount // 12) > ra.annuity_amount:
+		if (ra.maximum_amount // 12) < ra.annuity_amount:
 			res["ra_amount"] = ra.maximum_amount // 12
 	return res
-
-
-
 
 def get_medical_aid(dependant):
 	cur_year = date.today().year
