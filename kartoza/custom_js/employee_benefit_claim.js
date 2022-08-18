@@ -14,7 +14,11 @@ frappe.ui.form.on('Employee Benefit Claim', {
 			},
 			async:false,
 			callback: function(r){
-					if(r.message){
+					if(!r.exc){
+						r.message["amount_per_kilometer"] = parseInt(r.message["amount_per_kilometer"])
+						if(!r.message["amount_per_kilometer"]){
+							frappe.throw("Set Amount Per Kilometer in HR Settings")
+						}
 						frm.set_value("claimed_amount",frm.doc.kilometer * r.message["amount_per_kilometer"]);
 					}
 			} 

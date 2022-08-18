@@ -1,18 +1,20 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "format:{effective_from}",
+ "autoname": "naming_series:",
  "creation": "2022-08-07 11:56:18.450442",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "from_date",
-  "end_date",
+  "effective_from",
   "employee",
   "employee_name",
-  "disable",
   "column_break_2",
+  "to",
+  "disable",
+  "naming_series",
+  "section_break_7",
   "maximum_",
   "maximum_amount",
   "annuity_amount"
@@ -30,7 +32,7 @@
    "reqd": 1
   },
   {
-   "description": "/ year",
+   "description": "/ Year",
    "fieldname": "maximum_amount",
    "fieldtype": "Currency",
    "in_list_view": 1,
@@ -44,7 +46,7 @@
    "label": "Disable"
   },
   {
-   "description": "/ month",
+   "description": "/ Month",
    "fieldname": "annuity_amount",
    "fieldtype": "Currency",
    "label": "Annuity Amount",
@@ -65,22 +67,32 @@
    "read_only": 1
   },
   {
-   "fieldname": "end_date",
+   "fieldname": "effective_from",
    "fieldtype": "Date",
-   "label": "To Date",
+   "in_list_view": 1,
+   "label": "Effective From",
    "reqd": 1
   },
   {
-   "fieldname": "from_date",
+   "fieldname": "to",
    "fieldtype": "Date",
-   "in_list_view": 1,
-   "label": "From Date",
+   "label": "To",
    "reqd": 1
+  },
+  {
+   "fieldname": "section_break_7",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "RA-.YYYY.-"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-08-18 10:47:20.380709",
+ "modified": "2022-08-18 11:58:49.948390",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Retirement Annuity",

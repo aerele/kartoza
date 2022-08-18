@@ -14,6 +14,8 @@ class CustomSalarySlip(SalarySlip):
 		if dob:
 			tax_rebate = get_tax_rebate(dob,self.start_date)
 		earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings"))
+		if not earning_limit:
+			frappe.throw("Set Earning Limit in HR Setting to calculate Deduction")
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component"):
 				self.tax_value = self.deductions[i.idx-1].amount
@@ -30,7 +32,7 @@ class CustomSalarySlip(SalarySlip):
 		taxable_income = super().get_taxable_earnings(allow_tax_exemption, based_on_payment_days)
 		ra = get_retirement_annuity(self)
 		if ra:
-			ra_percent = ra.ra_amount / taxable_income.taxable_earnings *100
+			ra_percent = ra.ra_amount / taxable_income.taxable_earnings * 100
 			if ra_percent > ra.limit_percent:
 				ra_percent = ra.limit_percent
 			ra_amount = ra_percent * taxable_income.taxable_earnings / 100
@@ -39,8 +41,9 @@ class CustomSalarySlip(SalarySlip):
 		return taxable_income
 
 def get_retirement_annuity(self):
-	ra = frappe.db.get_value("Retirement Annuity", {"from_date":[">=", self.start_date], "to_date":["<=", self.start_date] ,"disable":0, "employee":self.employee})
+	ra = frappe.db.get_value("Retirement Annuity", {"effective_from":["<=", self.start_date], "to":[">=", self.end_date], "effective_from":["<=", self.end_date], "to":[">=", self.start_date]  ,"disable":0, "employee":self.employee})
 	res = frappe._dict({})
+	print("ra", ra)
 	if ra:
 		ra = frappe.get_doc("Retirement Annuity", ra)
 		res['limit_percent'] = ra.maximum_
@@ -50,7 +53,7 @@ def get_retirement_annuity(self):
 	return res
 
 def get_medical_aid(dependant , date):
-	cur_year = date.year
+	cur_year = datetime.strptime(str(date), "%Y-%m-%d").year
 	name = frappe.db.get_value("Medical Tax Credit Rate", {"year":cur_year})
 	if name:
 		doc = frappe.get_doc("Medical Tax Credit Rate", name)
@@ -64,8 +67,8 @@ def get_medical_aid(dependant , date):
 	return 0
 
 
-def get_tax_rebate(dob,date):
-	cur_year = date.year
+def get_tax_rebate(dob,start_date):
+	cur_year = datetime.strptime(str(start_date), "%Y-%m-%d").year
 	if isinstance(dob, str):
 		dob = datetime.strptime(dob,"%y-%m-%d")
 	today = date.today()
@@ -73,10 +76,10 @@ def get_tax_rebate(dob,date):
 	name = frappe.db.get_value("Tax Rebates Rate", {"year":cur_year})
 	if name:
 		doc = frappe.get_doc("Tax Rebates Rate", name)
-		tax_rebate = doc.primary or 0
-		if age >= 65 and age <= 75:
-			return doc.secondary or 0
-		if age > 75:
-			tax_rebate = doc.tertiary or 0
+		tax_rebate = (doc.primary / 12) or 0
+		if age >= 65 and age < 75:
+			return (doc.secondary / 12) or 0
+		if age >= 75:
+			tax_rebate = (doc.tertiary / 12) or 0
 		return tax_rebate
 	return 0
