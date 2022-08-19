@@ -67,6 +67,13 @@ class CustomSalarySlip(SalarySlip):
 			ra_amount = ra_percent * taxable_income.taxable_earnings / 100
 			self.retirement_annuity = ra_amount
 			taxable_income.taxable_earnings -= ra_amount
+		travel_tax = 0
+		for i in self.earnings:
+			if "3701" in i.salary_component:
+				travel_tax += i.amount - i.amount * 80 / 100
+				print(travel_tax)
+		taxable_income.taxable_earnings -= travel_tax
+		print(taxable_income)
 		return taxable_income
 	def get_taxable_earnings_for_prev_period(self, start_date, end_date, allow_tax_exemption=False):
 		taxable_earnings = frappe.db.sql("""
