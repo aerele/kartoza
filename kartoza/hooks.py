@@ -86,7 +86,8 @@ after_install = "kartoza.install.after_install"
 # Override standard doctype classes
 
 override_doctype_class = {
-	"Salary Slip": "kartoza.custom_py.salary_slip.CustomSalarySlip"
+	"Salary Slip": "kartoza.custom_py.salary_slip.CustomSalarySlip",
+	"Payroll Entry": "kartoza.custom_py.payroll_entry.CustomPayrollEntry"
 # 	"ToDo": "custom_app.overrides.CustomToDo"
 }
 
