@@ -26,7 +26,7 @@ class CustomSalarySlip(SalarySlip):
 		medical_aid = 0
 		tax_rebate = 0
 		if dependant:
-			medical_aid = get_medical_aid(dependant,self.start_date)
+			medical_aid = get_medical_aid(dependant,self.start_date, self.employee)
 		if dob:
 			tax_rebate = get_tax_rebate(dob,self.start_date)
 		earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings") or 0)
@@ -38,6 +38,10 @@ class CustomSalarySlip(SalarySlip):
 			if "4141" in i.salary_component:
 				uif_in_component = i.salary_component
 		has_uif_in_slip = False
+		basic = 0
+		for i in self.earnings:
+			if "3601" in i.salary_component:
+				basic = i.amount
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component") and frappe.db.get_value("Salary Component", i.salary_component, "variable_based_on_taxable_salary"):
 				self.tax_value = self.deductions[i.idx-1].amount
@@ -46,11 +50,11 @@ class CustomSalarySlip(SalarySlip):
 				self.medical_aid = medical_aid
 			if "4141" in i.salary_component:
 				has_uif_in_slip = True
-				self.deductions[i.idx-1].amount = self.gross_pay / 100 if earning_limit > self.gross_pay else earning_limit / 100
+				self.deductions[i.idx-1].amount = basic / 100 if earning_limit > basic else earning_limit / 100
 		if uif_in_component and not has_uif_in_slip:
 			super().update_component_row(
 				get_salary_component_data(uif_in_component),
-				self.gross_pay / 100 if earning_limit > self.gross_pay else earning_limit / 100,
+				basic / 100 if earning_limit > basic else earning_limit / 100,
 				"deductions"
 			)
 		super().set_loan_repayment()
@@ -209,29 +213,32 @@ class CustomSalarySlip(SalarySlip):
 			current_tax_amount = 0
 		return current_tax_amount
 def get_retirement_annuity(self):
-	ra = frappe.db.get_value("Retirement Annuity", {"effective_from":["<=", self.start_date], "to":[">=", self.end_date], "effective_from":["<=", self.end_date], "to":[">=", self.start_date]  ,"disable":0, "employee":self.employee})
-	res = frappe._dict({})
-	if ra:
-		ra = frappe.get_doc("Retirement Annuity", ra)
-		res['limit_percent'] = ra.maximum_
-		res["ra_amount"] = ra.annuity_amount
-		if (ra.maximum_amount // 12) < ra.annuity_amount:
-			res["ra_amount"] = ra.maximum_amount // 12
-	return res
+  ra = frappe.db.get_value("Employee Benefit", {"effective_from":["<=", self.start_date], "to":[">=", self.start_date] ,"disable":0, "employee":self.employee})
+  res = frappe._dict({})
+  if ra:
+    ra = frappe.get_doc("Employee Benefit", ra)
+    res['limit_percent'] = ra.maximum_
+    res["ra_amount"] = ra.annuity_amount
+    if (ra.maximum_amount // 12) < ra.annuity_amount:
+      res["ra_amount"] = ra.maximum_amount // 12
+  return res
 
-def get_medical_aid(dependant , date):
-	cur_year = datetime.strptime(str(date), "%Y-%m-%d").year
-	name = frappe.db.get_value("Medical Tax Credit Rate", {"year":cur_year})
-	if name:
-		doc = frappe.get_doc("Medical Tax Credit Rate", name)
-		if dependant == 1:
-			return doc.one_dependant or 0
-		medical_aid = doc.two_dependant or 0
-		dependant -= 2
-		if dependant:
-			medical_aid = (medical_aid + (dependant * doc.additional_dependant)) or 0
-		return medical_aid
-	return 0
+
+
+
+def get_medical_aid(dependant , date ,employee):
+  cur_year = datetime.strptime(str(date), "%Y-%m-%d").year
+  name = frappe.db.sql("""select mt.name from `tabEmployee Benefit` as eb join `tabMedical Tax Credit Rate` as mt on mt.parent = eb.name where eb.employee = '{0}' and mt.year = '{1}' and eb.effective_from <= '{2}' and eb.to >= '{2}'""".format(employee,cur_year,date),as_dict = True)  
+  if name:
+    doc = frappe.get_doc("Medical Tax Credit Rate", name[0].name)
+    if dependant == 1:
+      return doc.one_dependant or 0
+    medical_aid = doc.two_dependant or 0
+    dependant -= 2
+    if dependant:
+      medical_aid = (medical_aid + (dependant * doc.additional_dependant)) or 0
+    return medical_aid
+  return 0
 
 
 def get_tax_rebate(dob,start_date):

@@ -14,6 +14,8 @@
   "to",
   "disable",
   "naming_series",
+  "medical_tax_benefit_section",
+  "medical_tax",
   "section_break_7",
   "maximum_",
   "maximum_amount",
@@ -81,21 +83,33 @@
   },
   {
    "fieldname": "section_break_7",
-   "fieldtype": "Section Break"
+   "fieldtype": "Section Break",
+   "label": "Retirement Annuity"
   },
   {
    "fieldname": "naming_series",
    "fieldtype": "Select",
    "label": "Naming Series",
    "options": "RA-.YYYY.-"
+  },
+  {
+   "fieldname": "medical_tax_benefit_section",
+   "fieldtype": "Section Break",
+   "label": "Medical Tax Benefit"
+  },
+  {
+   "fieldname": "medical_tax",
+   "fieldtype": "Table",
+   "label": "Medical Tax",
+   "options": "Medical Tax Credit Rate"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-08-18 11:58:49.948390",
+ "modified": "2022-09-01 12:49:13.069373",
  "modified_by": "Administrator",
  "module": "Kartoza",
- "name": "Retirement Annuity",
+ "name": "Employee Benefit",
  "owner": "Administrator",
  "permissions": [
   {
