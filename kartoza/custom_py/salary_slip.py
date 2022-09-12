@@ -48,15 +48,27 @@ class CustomSalarySlip(SalarySlip):
 				self.deductions[i.idx-1].amount -= (medical_aid + tax_rebate)
 				self.tax_rebate = tax_rebate
 				self.medical_aid = medical_aid
-			if "4141" in i.salary_component:
-				has_uif_in_slip = True
-				self.deductions[i.idx-1].amount = basic / 100 if earning_limit > basic else earning_limit / 100
+			# if "4141" in i.salary_component:
+			# 	has_uif_in_slip = True
+			# 	self.deductions[i.idx-1].amount = basic / 100 if earning_limit > basic else earning_limit / 100
 		if uif_in_component and not has_uif_in_slip:
 			super().update_component_row(
 				get_salary_component_data(uif_in_component),
 				basic / 100 if earning_limit > basic else earning_limit / 100,
 				"deductions"
 			)
+		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
+
+		self.company_contribution = []
+		data = self.get_data_for_eval()
+		for component in salary_structure_doc.company_contribution:
+			component.name = None
+			component.amount = self.eval_condition_and_formula(component, data)
+			if component.amount <= 0:
+				continue
+			self.append('company_contribution', component)
+
+
 		super().set_loan_repayment()
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
@@ -73,8 +85,9 @@ class CustomSalarySlip(SalarySlip):
 			taxable_income.taxable_earnings -= ra_amount
 		travel_tax = 0
 		for i in self.earnings:
-			if "3701" in i.salary_component:
-				travel_tax += i.amount - i.amount * 80 / 100
+			reduce, percent = frappe.db.get_value("Salary Component", i.salary_component, ["reduce_on_taxable_earning", "raxable_earning_reduce_percentage"])
+			if reduce:
+				travel_tax += i.amount - i.amount * percent / 100
 		taxable_income.taxable_earnings -= travel_tax
 		return taxable_income
 	def get_taxable_earnings_for_prev_period(self, start_date, end_date, allow_tax_exemption=False):
