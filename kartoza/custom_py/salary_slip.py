@@ -29,19 +29,19 @@ class CustomSalarySlip(SalarySlip):
 			medical_aid = get_medical_aid(dependant,self.start_date, self.employee)
 		if dob:
 			tax_rebate = get_tax_rebate(dob,self.start_date)
-		earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings") or 0)
-		if not earning_limit:
-			frappe.throw("Set Earning Limit in HR Setting to Calculate Deduction")
-		uif_in_component = None
-		sal_structure = frappe.get_doc("Salary Structure", self.salary_structure)
-		for i in sal_structure.deductions:
-			if "4141" in i.salary_component:
-				uif_in_component = i.salary_component
-		has_uif_in_slip = False
-		basic = 0
-		for i in self.earnings:
-			if "3601" in i.salary_component:
-				basic = i.amount
+		# earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings") or 0)
+		# if not earning_limit:
+		# 	frappe.throw("Set Earning Limit in HR Setting to Calculate Deduction")
+		# uif_in_component = None
+		# sal_structure = frappe.get_doc("Salary Structure", self.salary_structure)
+		# for i in sal_structure.deductions:
+		# 	if "4141" in i.salary_component:
+		# 		uif_in_component = i.salary_component
+		# has_uif_in_slip = False
+		# basic = 0
+		# for i in self.earnings:
+			# if "3601" in i.salary_component:
+			# 	basic = i.amount
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component") and frappe.db.get_value("Salary Component", i.salary_component, "variable_based_on_taxable_salary"):
 				self.tax_value = self.deductions[i.idx-1].amount
@@ -51,12 +51,12 @@ class CustomSalarySlip(SalarySlip):
 			# if "4141" in i.salary_component:
 			# 	has_uif_in_slip = True
 			# 	self.deductions[i.idx-1].amount = basic / 100 if earning_limit > basic else earning_limit / 100
-		if uif_in_component and not has_uif_in_slip:
-			super().update_component_row(
-				get_salary_component_data(uif_in_component),
-				basic / 100 if earning_limit > basic else earning_limit / 100,
-				"deductions"
-			)
+		# if uif_in_component and not has_uif_in_slip:
+		# 	super().update_component_row(
+		# 		get_salary_component_data(uif_in_component),
+		# 		basic / 100 if earning_limit > basic else earning_limit / 100,
+		# 		"deductions"
+		# 	)
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
 		self.company_contribution = []
@@ -85,9 +85,10 @@ class CustomSalarySlip(SalarySlip):
 			taxable_income.taxable_earnings -= ra_amount
 		travel_tax = 0
 		for i in self.earnings:
-			reduce, percent = frappe.db.get_value("Salary Component", i.salary_component, ["reduce_on_taxable_earning", "raxable_earning_reduce_percentage"])
+			reduce, percent = frappe.db.get_value("Salary Component", i.salary_component, ["reduce_on_taxable_earning", "taxable_earning_reduce_percentage"])
 			if reduce:
-				travel_tax += i.amount - i.amount * percent / 100
+				# travel_tax += i.amount - i.amount * percent / 100
+				print(i.amount * percent / 100)
 		taxable_income.taxable_earnings -= travel_tax
 		return taxable_income
 	def get_taxable_earnings_for_prev_period(self, start_date, end_date, allow_tax_exemption=False):
@@ -226,7 +227,7 @@ class CustomSalarySlip(SalarySlip):
 			current_tax_amount = 0
 		return current_tax_amount
 def get_retirement_annuity(self):
-  ra = frappe.db.get_value("Employee Benefit", {"effective_from":["<=", self.start_date], "to":[">=", self.start_date] ,"disable":0, "employee":self.employee})
+  ra = frappe.db.get_value("Employee Benefit", {"effective_from":["<=", self.start_date], "to":[">=", self.end_date] ,"disable":0, "employee":self.employee})
   res = frappe._dict({})
   if ra:
     ra = frappe.get_doc("Employee Benefit", ra)
