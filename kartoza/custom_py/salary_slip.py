@@ -59,14 +59,14 @@ class CustomSalarySlip(SalarySlip):
 		# 	)
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
-		self.company_contribution = []
-		data = self.get_data_for_eval()
-		for component in salary_structure_doc.company_contribution:
-			component.name = None
-			component.amount = self.eval_condition_and_formula(component, data)
-			if component.amount <= 0:
-				continue
-			self.append('company_contribution', component)
+		#self.company_contribution = []
+		#data = self.get_data_for_eval()
+		#for component in salary_structure_doc.company_contribution:
+		#	component.name = None
+		#	component.amount = self.eval_condition_and_formula(component, data)
+		#	if component.amount <= 0:
+		#		continue
+		#	self.append('company_contribution', component)
 
 
 		super().set_loan_repayment()
@@ -87,8 +87,7 @@ class CustomSalarySlip(SalarySlip):
 		for i in self.earnings:
 			reduce, percent = frappe.db.get_value("Salary Component", i.salary_component, ["reduce_on_taxable_earning", "taxable_earning_reduce_percentage"])
 			if reduce:
-				# travel_tax += i.amount - i.amount * percent / 100
-				print(i.amount * percent / 100)
+				travel_tax += i.amount - (i.amount * percent / 100)
 		taxable_income.taxable_earnings -= travel_tax
 		return taxable_income
 	def get_taxable_earnings_for_prev_period(self, start_date, end_date, allow_tax_exemption=False):
