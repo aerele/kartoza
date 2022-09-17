@@ -7,12 +7,11 @@ def after_install():
 def make_custom_fields():
 	custom_fields = {
 		'HR Settings': [
-			dict(fieldname='amount_per_kilometer', label='Amount Per Kilometer',
-			fieldtype='Currency', insert_after='emp_created_by')
-			dict(fieldname='maximum_earnings', label='Maximum Earnings',
-			fieldtype='Currency', insert_after='retirement_age', description='Per Month')
 		]
 	}
+	if frappe.get_meta("HR Settings").get_field("amount_per_kilometer"):
+		custom_fields["HR Settings"].append(dict(fieldname='amount_per_kilometer', label='Amount Per Kilometer',
+                        fieldtype='Currency', insert_after='emp_created_by'))
 	create_custom_fields(custom_fields)
 
     
