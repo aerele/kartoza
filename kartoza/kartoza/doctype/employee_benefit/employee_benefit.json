@@ -7,19 +7,19 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "medical_tax_benefit_section",
+  "medical_tax",
+  "section_break_7",
   "effective_from",
   "employee",
   "employee_name",
+  "annuity_amount",
   "column_break_2",
   "to",
   "disable",
   "naming_series",
-  "medical_tax_benefit_section",
-  "medical_tax",
-  "section_break_7",
   "maximum_",
-  "maximum_amount",
-  "annuity_amount"
+  "maximum_amount"
  ],
  "fields": [
   {
@@ -78,8 +78,7 @@
   {
    "fieldname": "to",
    "fieldtype": "Date",
-   "label": "To",
-   "reqd": 1
+   "label": "To"
   },
   {
    "fieldname": "section_break_7",
@@ -106,7 +105,7 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-09-01 12:49:13.069373",
+ "modified": "2022-09-18 14:01:27.402921",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Employee Benefit",
