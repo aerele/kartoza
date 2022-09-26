@@ -7,14 +7,17 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "employee",
+  "column_break_2",
+  "employee_name",
+  "section_break_4",
   "medical_tax_benefit_section",
   "medical_tax",
   "section_break_7",
   "effective_from",
-  "employee",
-  "employee_name",
+  "clearance_number",
   "annuity_amount",
-  "column_break_2",
+  "column_break_10",
   "to",
   "disable",
   "naming_series",
@@ -101,11 +104,24 @@
    "fieldtype": "Table",
    "label": "Medical Tax",
    "options": "Medical Tax Credit Rate"
+  },
+  {
+   "fieldname": "section_break_4",
+   "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "column_break_10",
+   "fieldtype": "Column Break"
+  },
+  {
+   "fieldname": "clearance_number",
+   "fieldtype": "Data",
+   "label": "Clearance Number"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-09-18 14:01:27.402921",
+ "modified": "2022-09-26 06:30:52.972494",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Employee Benefit",
