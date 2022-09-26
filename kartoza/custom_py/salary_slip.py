@@ -1,22 +1,10 @@
 import frappe
 from erpnext.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data
 from datetime import date,datetime
-from erpnext.payroll.doctype.payroll_period.payroll_period import (
-	get_payroll_period,
-	get_period_factor,
-)
-from frappe.utils import (
-	add_days,
-	cint,
-	cstr,
-	date_diff,
-	flt,
-	formatdate,
-	get_first_day,
-	getdate,
-	money_in_words,
-	rounded,
-)
+from erpnext.payroll.doctype.payroll_period.payroll_period import get_period_factor
+from erpnext.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
+from erpnext.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
+from frappe.utils import flt
 import math
 class CustomSalarySlip(SalarySlip):
 	def calculate_net_pay(self):
@@ -25,10 +13,8 @@ class CustomSalarySlip(SalarySlip):
 		dob = frappe.db.get_value("Employee", self.employee, "date_of_birth")
 		medical_aid = 0
 		tax_rebate = 0
-		# print(self.employee, dependant)
 		if dependant:
 			medical_aid = get_medical_aid(dependant,self.start_date, self.employee)
-			# print("medical_aid", medical_aid)
 		if dob:
 			tax_rebate = get_tax_rebate(dob,self.start_date)
 		# earning_limit = float(frappe.db.get_value("HR Settings", "HR Settings", "maximum_earnings") or 0)
@@ -75,9 +61,21 @@ class CustomSalarySlip(SalarySlip):
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
 
+	def add_employee_benefits(self, payroll_period):
+		for struct_row in self._salary_structure_doc.get("earnings"):
+			if struct_row.is_flexible_benefit == 1:
+				if frappe.db.get_value("Salary Component", struct_row.salary_component, "pay_against_benefit_claim") != 1:
+					benefit_component_amount = get_benefit_component_amount(self.employee, self.start_date, self.end_date,
+						struct_row.salary_component, self._salary_structure_doc, self.payroll_frequency, payroll_period)
+					if benefit_component_amount:
+						self.update_component_row(struct_row, benefit_component_amount, "earnings")
+				else:
+					benefit_claim_amount = get_benefit_claim_amount(self.employee, self.start_date, self.end_date, struct_row.salary_component)
+					if benefit_claim_amount:
+						self.update_component_row(struct_row, benefit_claim_amount, "earnings")
+
 	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0, payroll_period=None):
 		taxable_income = super().get_taxable_earnings(allow_tax_exemption, based_on_payment_days, payroll_period)
-		# print(taxable_income)
 		ra = get_retirement_annuity(self)
 		if ra:
 			ra_percent = ra.ra_amount / taxable_income.taxable_earnings * 100
@@ -91,7 +89,6 @@ class CustomSalarySlip(SalarySlip):
 			reduce, percent = frappe.db.get_value("Salary Component", i.salary_component, ["reduce_on_taxable_earning", "taxable_earning_reduce_percentage"])
 			if reduce:
 				tax += i.amount - (i.amount * percent / 100)
-			# print("tax")
 			if i.is_flexible_benefit:
 				taxable_income.flexi_benefits -= tax
 			else:
@@ -159,60 +156,45 @@ class CustomSalarySlip(SalarySlip):
 	def calculate_variable_tax(self, payroll_period, tax_component):
 		# get Tax slab from salary structure assignment for the employee and payroll period
 		tax_slab = self.get_income_tax_slabs(payroll_period)
-		print("tax_slab", tax_slab)
 		# get remaining numbers of sub-period (period for which one salary is processed)
 		remaining_sub_periods = get_remaining_sub_periods(self.employee, self.start_date, self.end_date, self.payroll_frequency, payroll_period)
-		print("remaining_sub_periods", remaining_sub_periods)
 		# get taxable_earnings, paid_taxes for previous period
 		previous_taxable_earnings = self.get_taxable_earnings_for_prev_period(
 			payroll_period.start_date, self.start_date, tax_slab.allow_tax_exemption
 		)
-		print("previous_taxable_earnings", previous_taxable_earnings)
 		previous_total_paid_taxes = self.get_tax_paid_in_period(
 			payroll_period.start_date, self.start_date, tax_component
 		)
-		print("previous_total_paid_taxes", previous_total_paid_taxes)
 
 		# get taxable_earnings for current period (all days)
 		current_taxable_earnings = self.get_taxable_earnings(
 			tax_slab.allow_tax_exemption, payroll_period=payroll_period
 		)
-		print("current_taxable_earnings", current_taxable_earnings)
 		future_structured_taxable_earnings = current_taxable_earnings.taxable_earnings * (
 			math.ceil(remaining_sub_periods) - 1
 		)
-		print("future_structured_taxable_earnings", future_structured_taxable_earnings)
 
 		# get taxable_earnings, addition_earnings for current actual payment days
 		current_taxable_earnings_for_payment_days = self.get_taxable_earnings(
 			tax_slab.allow_tax_exemption, based_on_payment_days=1, payroll_period=payroll_period
 		)
-		print("current_taxable_earnings_for_payment_days", current_taxable_earnings_for_payment_days)
 		current_structured_taxable_earnings = current_taxable_earnings_for_payment_days.taxable_earnings
-		print("current_structured_taxable_earnings", current_structured_taxable_earnings)
 		current_additional_earnings = current_taxable_earnings_for_payment_days.additional_income
-		print("current_additional_earnings", current_additional_earnings)
 		current_additional_earnings_with_full_tax = (
 			current_taxable_earnings_for_payment_days.additional_income_with_full_tax
 		)
-		print("current_additional_earnings_with_full_tax", current_additional_earnings_with_full_tax)
 
 		# Get taxable unclaimed benefits
 		unclaimed_taxable_benefits = 0
-		print("deduct_tax_for_unclaimed_employee_benefits", self.deduct_tax_for_unclaimed_employee_benefits)
 		if self.deduct_tax_for_unclaimed_employee_benefits:
 			unclaimed_taxable_benefits = self.calculate_unclaimed_taxable_benefits(payroll_period)
-			print("unclaimed_taxable_benefits", unclaimed_taxable_benefits)
 			unclaimed_taxable_benefits += current_taxable_earnings_for_payment_days.flexi_benefits
-			print("unclaimed_taxable_benefits", unclaimed_taxable_benefits)
 
 		# Total exemption amount based on tax exemption declaration
 		total_exemption_amount = self.get_total_exemption_amount(payroll_period, tax_slab)
-		print("total_exemption_amount", total_exemption_amount)
 
 		# Employee Other Incomes
 		other_incomes = self.get_income_form_other_sources(payroll_period) or 0.0
-		print("other_incomes", other_incomes)
 
 		# Total taxable earnings including additional and other incomes
 		total_taxable_earnings = (
@@ -224,36 +206,27 @@ class CustomSalarySlip(SalarySlip):
 			+ unclaimed_taxable_benefits
 			- total_exemption_amount
 		)
-		print("total_taxable_earnings", total_taxable_earnings)
 
 		# Total taxable earnings without additional earnings with full tax
 		total_taxable_earnings_without_full_tax_addl_components = (
 			total_taxable_earnings - current_additional_earnings_with_full_tax
 		)
-		print("total_taxable_earnings_without_full_tax_addl_components", total_taxable_earnings_without_full_tax_addl_components)
 
 		# Structured tax amount
 		total_structured_tax_amount = self.calculate_tax_by_tax_slab(
 			total_taxable_earnings_without_full_tax_addl_components, tax_slab
 		)
-		print("total_structured_tax_amount", total_structured_tax_amount)
 		current_structured_tax_amount = (
 			total_structured_tax_amount - previous_total_paid_taxes
 		) / remaining_sub_periods
-		print("current_structured_tax_amount", total_structured_tax_amount, previous_total_paid_taxes, remaining_sub_periods)
-		print("current_structured_tax_amount", current_structured_tax_amount)
 
 		# Total taxable earnings with additional earnings with full tax
 		full_tax_on_additional_earnings = 0.0
-		print("current_additional_earnings_with_full_tax", current_additional_earnings_with_full_tax)
 		if current_additional_earnings_with_full_tax:
 			total_tax_amount = self.calculate_tax_by_tax_slab(total_taxable_earnings, tax_slab)
-			print("total_tax_amount", total_tax_amount)
 			full_tax_on_additional_earnings = total_tax_amount - total_structured_tax_amount
-			print("full_tax_on_additional_earnings", full_tax_on_additional_earnings)
 
 		current_tax_amount = current_structured_tax_amount + full_tax_on_additional_earnings
-		print("current_tax_amount", current_tax_amount)
 		if flt(current_tax_amount) < 0:
 			current_tax_amount = 0
 		return current_tax_amount
@@ -305,7 +278,6 @@ def get_medical_aid(dependant , date ,employee):
 	if name:
 		doc = frappe.get_doc("Medical Tax Credit Rate", name[0].name)
 	if dependant == 1:
-		print(doc.one_dependant or 0)
 		return doc.one_dependant or 0
 	medical_aid = doc.two_dependant or 0
 	dependant -= 2
