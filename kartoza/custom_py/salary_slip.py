@@ -47,14 +47,14 @@ class CustomSalarySlip(SalarySlip):
 		# 	)
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
-		#self.company_contribution = []
-		#data = self.get_data_for_eval()
-		#for component in salary_structure_doc.company_contribution:
-		#	component.name = None
-		#	component.amount = self.eval_condition_and_formula(component, data)
-		#	if component.amount <= 0:
-		#		continue
-		#	self.append('company_contribution', component)
+		self.company_contribution = []
+		data = self.get_data_for_eval()
+		for component in salary_structure_doc.company_contribution:
+			component.name = None
+			component.amount = self.eval_condition_and_formula(component, data)
+			if component.amount <= 0:
+				continue
+			self.append('company_contribution', component)
 
 
 		super().set_loan_repayment()
