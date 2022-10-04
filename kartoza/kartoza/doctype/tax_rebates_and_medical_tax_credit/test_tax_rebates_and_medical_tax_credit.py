@@ -4,5 +4,5 @@
 # import frappe
 import unittest
 
-class TestTaxRebates(unittest.TestCase):
+class TestTaxRebatesandMedicalTaxCredit(unittest.TestCase):
 	pass

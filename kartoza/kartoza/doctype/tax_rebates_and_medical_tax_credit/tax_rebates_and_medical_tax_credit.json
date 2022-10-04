@@ -6,7 +6,8 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
-  "tax_rebates_rate"
+  "tax_rebates_rate",
+  "medical_tax_credit"
  ],
  "fields": [
   {
@@ -14,15 +15,21 @@
    "fieldtype": "Table",
    "label": "Tax Rebates Rate",
    "options": "Tax Rebates Rate"
+  },
+  {
+   "fieldname": "medical_tax_credit",
+   "fieldtype": "Table",
+   "label": "Medical Tax Credit",
+   "options": "Medical Tax Credit Rate"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2022-08-06 10:50:40.139389",
+ "modified": "2022-10-04 11:02:38.635178",
  "modified_by": "Administrator",
  "module": "Kartoza",
- "name": "Tax Rebates",
+ "name": "Tax Rebates and Medical Tax Credit",
  "owner": "Administrator",
  "permissions": [
   {

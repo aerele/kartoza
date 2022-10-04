@@ -12,7 +12,7 @@
   "employee_name",
   "section_break_4",
   "medical_tax_benefit_section",
-  "medical_tax",
+  "private_medical_aid",
   "section_break_7",
   "effective_from",
   "clearance_number",
@@ -100,12 +100,6 @@
    "label": "Medical Tax Benefit"
   },
   {
-   "fieldname": "medical_tax",
-   "fieldtype": "Table",
-   "label": "Medical Tax",
-   "options": "Medical Tax Credit Rate"
-  },
-  {
    "fieldname": "section_break_4",
    "fieldtype": "Section Break"
   },
@@ -117,11 +111,16 @@
    "fieldname": "clearance_number",
    "fieldtype": "Data",
    "label": "Clearance Number"
+  },
+  {
+   "fieldname": "private_medical_aid",
+   "fieldtype": "Currency",
+   "label": "Private Medical Aid"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-09-26 06:30:52.972494",
+ "modified": "2022-10-04 12:03:43.390837",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Employee Benefit",
