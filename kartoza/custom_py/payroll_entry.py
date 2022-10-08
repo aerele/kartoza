@@ -42,8 +42,8 @@ class CustomPayrollEntry(PayrollEntry):
 				for sal_detail in salary_slip.company_contribution:
 					salary_slip_total += sal_detail.amount
 			if salary_slip_total > 0:
-				self.create_journal_entry(salary_slip_total, "salary")
-			
+				super().create_journal_entry(salary_slip_total, "salary")
+
 	def make_accrual_jv_entry(self):
 		jv = super().make_accrual_jv_entry()
 		if jv:
