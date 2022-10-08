@@ -55,6 +55,12 @@ class CustomSalarySlip(SalarySlip):
 			if component.amount <= 0:
 				continue
 			self.append('company_contribution', component)
+		total_company_contribution = 0
+		for i in self.company_contribution:
+			total_company_contribution += i.amount or 0
+		self.total_company_contribution = total_company_contribution
+
+		self.total_cost = self.gross_pay + self.total_company_contribution
 
 
 		super().set_loan_repayment()
