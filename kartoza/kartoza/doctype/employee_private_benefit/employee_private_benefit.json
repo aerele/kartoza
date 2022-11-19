@@ -13,6 +13,8 @@
   "section_break_4",
   "medical_tax_benefit_section",
   "private_medical_aid",
+  "column_break_7",
+  "medical_aid_dependant",
   "section_break_7",
   "effective_from",
   "clearance_number",
@@ -116,14 +118,24 @@
    "fieldname": "private_medical_aid",
    "fieldtype": "Currency",
    "label": "Private Medical Aid"
+  },
+  {
+   "fieldname": "column_break_7",
+   "fieldtype": "Column Break"
+  },
+  {
+   "default": "0",
+   "fieldname": "medical_aid_dependant",
+   "fieldtype": "Int",
+   "label": "Medical Aid Dependant"
   }
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-10-04 12:03:43.390837",
+ "modified": "2022-11-19 20:31:01.164846",
  "modified_by": "Administrator",
  "module": "Kartoza",
- "name": "Employee Benefit",
+ "name": "Employee Private Benefit",
  "owner": "Administrator",
  "permissions": [
   {

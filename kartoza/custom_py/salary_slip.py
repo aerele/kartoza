@@ -6,6 +6,19 @@ from erpnext.payroll.doctype.employee_benefit_application.employee_benefit_appli
 from erpnext.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
 from frappe.utils import flt
 import math
+from frappe.utils import (
+	add_days,
+	cint,
+	cstr,
+	date_diff,
+	flt,
+	formatdate,
+	get_first_day,
+	getdate,
+	money_in_words,
+	rounded,
+)
+
 class CustomSalarySlip(SalarySlip):
 	def add_tax_components(self, payroll_period):
 		# Calculate variable_based_on_taxable_salary after all components updated in salary slip
@@ -25,11 +38,40 @@ class CustomSalarySlip(SalarySlip):
 			tax_row = get_salary_component_data(d)
 			self.update_component_row(tax_row, tax_amount, "deductions")
 
+	def get_payment_days(self, joining_date, relieving_date, include_holidays_in_total_working_days):
+		# if not joining_date:
+		# 	joining_date, relieving_date = frappe.get_cached_value("Employee", self.employee,
+		# 		["date_of_joining", "relieving_date"])
+
+		start_date = getdate(self.start_date)
+		# if joining_date:
+		# 	if getdate(self.start_date) <= joining_date <= getdate(self.end_date):
+		# 		start_date = joining_date
+		# 	elif joining_date > getdate(self.end_date):
+		# 		return
+
+		end_date = getdate(self.end_date)
+		# if relieving_date:
+		# 	if getdate(self.start_date) <= relieving_date <= getdate(self.end_date):
+		# 		end_date = relieving_date
+		# 	elif relieving_date < getdate(self.start_date):
+		# 		frappe.throw(_("Employee relieved on {0} must be set as 'Left'")
+		# 			.format(relieving_date))
+
+		payment_days = date_diff(end_date, start_date) + 1
+
+		if not cint(include_holidays_in_total_working_days):
+			holidays = self.get_holidays_for_employee(start_date, end_date)
+			payment_days -= len(holidays)
+
+		return payment_days
+
 	def calculate_net_pay(self):
 		self.payroll_period = frappe.db.get_value('Payroll Period', {"start_date": ("<=", self.start_date),
 		"end_date": (">=", self.end_date), "company": self.company })
 		super().calculate_net_pay()
-		dependant = frappe.db.get_value("Employee", self.employee, "medical_aid_dependant")
+		# dependant = frappe.db.get_value("Employee", self.employee, "medical_aid_dependant")
+		dependant = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, 'medical_aid_dependant')
 		dob = frappe.db.get_value("Employee", self.employee, "date_of_birth")
 		medical_aid = 0
 		tax_rebate = 0
@@ -239,11 +281,11 @@ class CustomSalarySlip(SalarySlip):
 		return current_tax_amount
 
 def get_retirement_annuity(self):
-	ra = frappe.db.get_value("Employee Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, order_by='effective_from')
+	ra = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, order_by='effective_from')
 	res = frappe._dict({})
-	self.private_medical_aid = frappe.db.get_value("Employee Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, 'private_medical_aid') or 0
+	self.private_medical_aid = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, 'private_medical_aid') or 0
 	if ra:
-		ra = frappe.get_doc("Employee Benefit", ra)
+		ra = frappe.get_doc("Employee Private Benefit", ra)
 		res['limit_percent'] = ra.maximum_
 		res["ra_amount"] = ra.annuity_amount
 		if (ra.maximum_amount // 12) < ra.annuity_amount:
