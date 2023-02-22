@@ -91,6 +91,8 @@ class CustomSalarySlip(SalarySlip):
 
 		self.company_contribution = []
 		data = self.get_data_for_eval()
+		if type(data) == tuple:
+			data = data[0]
 		for component in salary_structure_doc.company_contribution:
 			component.name = None
 			component.amount = self.eval_condition_and_formula(component, data)
@@ -105,7 +107,7 @@ class CustomSalarySlip(SalarySlip):
 		self.total_cost = self.gross_pay + self.total_company_contribution
 
 
-		super().set_loan_repayment()
+		super().add_applicable_loans()
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
 
