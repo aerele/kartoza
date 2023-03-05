@@ -38,34 +38,6 @@ class CustomSalarySlip(SalarySlip):
 			tax_row = get_salary_component_data(d)
 			self.update_component_row(tax_row, tax_amount, "deductions")
 
-	def get_payment_days(self, joining_date, relieving_date, include_holidays_in_total_working_days):
-		# if not joining_date:
-		# 	joining_date, relieving_date = frappe.get_cached_value("Employee", self.employee,
-		# 		["date_of_joining", "relieving_date"])
-
-		start_date = getdate(self.start_date)
-		# if joining_date:
-		# 	if getdate(self.start_date) <= joining_date <= getdate(self.end_date):
-		# 		start_date = joining_date
-		# 	elif joining_date > getdate(self.end_date):
-		# 		return
-
-		end_date = getdate(self.end_date)
-		# if relieving_date:
-		# 	if getdate(self.start_date) <= relieving_date <= getdate(self.end_date):
-		# 		end_date = relieving_date
-		# 	elif relieving_date < getdate(self.start_date):
-		# 		frappe.throw(_("Employee relieved on {0} must be set as 'Left'")
-		# 			.format(relieving_date))
-
-		payment_days = date_diff(end_date, start_date) + 1
-
-		if not cint(include_holidays_in_total_working_days):
-			holidays = self.get_holidays_for_employee(start_date, end_date)
-			payment_days -= len(holidays)
-
-		return payment_days
-
 	def calculate_net_pay(self):
 		self.payroll_period = frappe.db.get_value('Payroll Period', {"start_date": ("<=", self.start_date),
 		"end_date": (">=", self.end_date), "company": self.company })
@@ -86,6 +58,8 @@ class CustomSalarySlip(SalarySlip):
 				self.deductions[i.idx-1].amount -= (medical_aid + tax_rebate)
 				self.tax_rebate = tax_rebate
 				self.medical_aid = medical_aid
+				if self.deductions[i.idx-1].amount < 0:
+					self.deductions[i.idx-1].amount = 0
 
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
@@ -204,9 +178,11 @@ class CustomSalarySlip(SalarySlip):
 				})
 		ra = flt(ra[0][0]) if ra else 0
 		return taxable_earnings - exempted_amount - ra
+
 	def calculate_variable_tax(self, payroll_period, tax_component):
 		# get Tax slab from salary structure assignment for the employee and payroll period
 		tax_slab = self.get_income_tax_slabs(payroll_period)
+
 		# get remaining numbers of sub-period (period for which one salary is processed)
 		remaining_sub_periods = get_remaining_sub_periods(self.employee, self.start_date, self.end_date, self.payroll_frequency, payroll_period)
 		# get taxable_earnings, paid_taxes for previous period
@@ -342,4 +318,4 @@ def get_remaining_sub_periods(employee, start_date, end_date, payroll_frequency,
 					"to_date": payroll_period.end_date
 				})
 	salary_slips = flt(salary_slips[0][0]) if salary_slips else 0
-	return sub_period - salary_slips
+	return sub_period #- salary_slips
