@@ -9,6 +9,13 @@ app_color = "grey"
 app_email = "kartoza@gmail.com"
 app_license = "MIT"
 
+
+fixtures = [
+	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'variable']]	},
+	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'base']]	},
+	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Slip'], ["field_name", '=', 'payroll_entry']]	},
+]
+
 # Includes in <head>
 # ------------------
 

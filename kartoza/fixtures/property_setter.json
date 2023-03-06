@@ -1,0 +1,19 @@
+[
+ {
+  "default_value": null,
+  "doc_type": "Salary Slip",
+  "docstatus": 0,
+  "doctype": "Property Setter",
+  "doctype_or_field": "DocField",
+  "field_name": "payroll_entry",
+  "modified": "2023-03-06 09:28:42.066096",
+  "name": "Salary Slip-payroll_entry-read_only",
+  "parent": null,
+  "parentfield": null,
+  "parenttype": null,
+  "property": "read_only",
+  "property_type": null,
+  "row_name": null,
+  "value": "0"
+ }
+]
