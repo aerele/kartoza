@@ -57,7 +57,6 @@ class CustomPayrollEntry(PayrollEntry):
 
 
 def get_payroll_entry_bank_entries(payroll_entry_name):
-	print("In Custom Function")
 	journal_entries = frappe.db.sql(
 		'select jea.name from `tabJournal Entry Account` as jea join `tabJournal Entry` as je on je.name=jea.parent '
 		'where jea.reference_type="Payroll Entry" '
