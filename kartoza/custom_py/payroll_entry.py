@@ -1,5 +1,5 @@
 import frappe
-from erpnext.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
+from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
 
 
 class CustomPayrollEntry(PayrollEntry):

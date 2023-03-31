@@ -46,7 +46,8 @@ doctype_js = {
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 
-from erpnext.payroll.doctype.payroll_entry import payroll_entry as _payroll_entry
+#from erpnext.payroll.doctype.payroll_entry import payroll_entry as _payroll_entry
+from hrms.payroll.doctype.payroll_entry import payroll_entry as _payroll_entry
 from kartoza.custom_py import payroll_entry as _custom_payroll_entry
 _payroll_entry.get_payroll_entry_bank_entries = _custom_payroll_entry.get_payroll_entry_bank_entries
 
