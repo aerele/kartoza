@@ -1,9 +1,9 @@
 import frappe
-from erpnext.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data
+from hrms.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data
 from datetime import date,datetime
-from erpnext.payroll.doctype.payroll_period.payroll_period import get_period_factor
-from erpnext.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
-from erpnext.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
+from hrms.payroll.doctype.payroll_period.payroll_period import get_period_factor
+from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
+from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
 from frappe.utils import flt
 import math
 from frappe.utils import (
@@ -20,7 +20,7 @@ from frappe.utils import (
 )
 
 class CustomSalarySlip(SalarySlip):
-	def add_tax_components(self, payroll_period):
+	def add_tax_components(self):
 		# Calculate variable_based_on_taxable_salary after all components updated in salary slip
 		tax_components, other_deduction_components = [], []
 		for d in self._salary_structure_doc.get("deductions"):
@@ -34,7 +34,7 @@ class CustomSalarySlip(SalarySlip):
 		# 		if d.name not in other_deduction_components]
 
 		for d in tax_components:
-			tax_amount = self.calculate_variable_based_on_taxable_salary(d, payroll_period)
+			tax_amount = self.calculate_variable_based_on_taxable_salary(d)
 			tax_row = get_salary_component_data(d)
 			self.update_component_row(tax_row, tax_amount, "deductions")
 
@@ -81,16 +81,18 @@ class CustomSalarySlip(SalarySlip):
 		self.total_cost = self.gross_pay + self.total_company_contribution
 
 
-		super().add_applicable_loans()
+		super().set_loan_repayment()
 		super().set_precision_for_component_amounts()
 		super().set_net_pay()
+		super().compute_income_tax_breakup()
+		
 
-	def add_employee_benefits(self, payroll_period):
+	def add_employee_benefits(self):
 		for struct_row in self._salary_structure_doc.get("earnings"):
 			if struct_row.is_flexible_benefit == 1:
 				if frappe.db.get_value("Salary Component", struct_row.salary_component, "pay_against_benefit_claim") != 1:
 					benefit_component_amount = get_benefit_component_amount(self.employee, self.start_date, self.end_date,
-						struct_row.salary_component, self._salary_structure_doc, self.payroll_frequency, payroll_period)
+						struct_row.salary_component, self._salary_structure_doc, self.payroll_frequency, self.payroll_period)
 					if benefit_component_amount:
 						self.update_component_row(struct_row, benefit_component_amount, "earnings")
 				else:
@@ -179,23 +181,23 @@ class CustomSalarySlip(SalarySlip):
 		ra = flt(ra[0][0]) if ra else 0
 		return taxable_earnings - exempted_amount - ra
 
-	def calculate_variable_tax(self, payroll_period, tax_component):
+	def calculate_variable_tax(self, tax_component):
 		# get Tax slab from salary structure assignment for the employee and payroll period
-		tax_slab = self.get_income_tax_slabs(payroll_period)
+		tax_slab = self.get_income_tax_slabs()
 
 		# get remaining numbers of sub-period (period for which one salary is processed)
-		remaining_sub_periods = get_remaining_sub_periods(self.employee, self.start_date, self.end_date, self.payroll_frequency, payroll_period)
+		remaining_sub_periods = get_remaining_sub_periods(self.employee, self.start_date, self.end_date, self.payroll_frequency, self.payroll_period)
 		# get taxable_earnings, paid_taxes for previous period
 		previous_taxable_earnings = self.get_taxable_earnings_for_prev_period(
-			payroll_period.start_date, self.start_date, tax_slab.allow_tax_exemption
+			self.payroll_period.start_date, self.start_date, tax_slab.allow_tax_exemption
 		)
 		previous_total_paid_taxes = self.get_tax_paid_in_period(
-			payroll_period.start_date, self.start_date, tax_component
+			self.payroll_period.start_date, self.start_date, tax_component
 		)
 
 		# get taxable_earnings for current period (all days)
 		current_taxable_earnings = self.get_taxable_earnings(
-			tax_slab.allow_tax_exemption, payroll_period=payroll_period
+			tax_slab.allow_tax_exemption, payroll_period=self.payroll_period
 		)
 		future_structured_taxable_earnings = current_taxable_earnings.taxable_earnings * (
 			math.ceil(remaining_sub_periods) - 1
@@ -203,7 +205,7 @@ class CustomSalarySlip(SalarySlip):
 
 		# get taxable_earnings, addition_earnings for current actual payment days
 		current_taxable_earnings_for_payment_days = self.get_taxable_earnings(
-			tax_slab.allow_tax_exemption, based_on_payment_days=1, payroll_period=payroll_period
+			tax_slab.allow_tax_exemption, based_on_payment_days=1, payroll_period=self.payroll_period
 		)
 		current_structured_taxable_earnings = current_taxable_earnings_for_payment_days.taxable_earnings
 		current_additional_earnings = current_taxable_earnings_for_payment_days.additional_income
@@ -214,14 +216,14 @@ class CustomSalarySlip(SalarySlip):
 		# Get taxable unclaimed benefits
 		unclaimed_taxable_benefits = 0
 		if self.deduct_tax_for_unclaimed_employee_benefits:
-			unclaimed_taxable_benefits = self.calculate_unclaimed_taxable_benefits(payroll_period)
+			unclaimed_taxable_benefits = self.calculate_unclaimed_taxable_benefits(self.payroll_period)
 			unclaimed_taxable_benefits += current_taxable_earnings_for_payment_days.flexi_benefits
 
 		# Total exemption amount based on tax exemption declaration
-		total_exemption_amount = self.get_total_exemption_amount(payroll_period, tax_slab)
+		total_exemption_amount = self.get_total_exemption_amount(self.payroll_period, tax_slab)
 
 		# Employee Other Incomes
-		other_incomes = self.get_income_form_other_sources(payroll_period) or 0.0
+		other_incomes = self.get_income_form_other_sources(self.payroll_period) or 0.0
 
 		# Total taxable earnings including additional and other incomes
 		total_taxable_earnings = (
