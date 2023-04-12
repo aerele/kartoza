@@ -5,7 +5,7 @@ def after_install():
 	make_custom_fields()
 
 def before_install():
-	frappe.get_doc({
+	doc = frappe.get_doc({
 			"docstatus": 0,
 			"idx": 0,
 			"issingle": 0,
@@ -51,6 +51,7 @@ def before_install():
 			"doctype": "DocType",
 			"links": [],
 			"states": [],
+			"__newname": "Company Contribution",
 			"fields": [
 				{
 					"parent": "Company Contribution",
@@ -427,7 +428,8 @@ def before_install():
 					"doctype": "DocField"
 				}
 			]
-		}).save()
+		})
+	doc.save()
 
 def make_custom_fields():
 	custom_fields = {
