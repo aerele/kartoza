@@ -71,7 +71,7 @@ _payroll_entry.get_payroll_entry_bank_entries = _custom_payroll_entry.get_payrol
 # Installation
 # ------------
 
-# before_install = "kartoza.install.before_install"
+before_install = "kartoza.install.before_install"
 after_install = "kartoza.install.after_install"
 # after_install = "kartoza.install.after_install"
 
