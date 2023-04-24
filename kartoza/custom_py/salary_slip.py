@@ -1,11 +1,12 @@
 import frappe
 from erpnext.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data
-from datetime import date,datetime
+from datetime import date,datetime,timedelta
 from erpnext.payroll.doctype.payroll_period.payroll_period import get_period_factor
 from erpnext.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
 from erpnext.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
 from frappe.utils import flt
 import math
+import calendar
 from frappe.utils import (
 	add_days,
 	cint,
@@ -178,6 +179,54 @@ class CustomSalarySlip(SalarySlip):
 				})
 		ra = flt(ra[0][0]) if ra else 0
 		return taxable_earnings - exempted_amount - ra
+	def get_amount_based_on_payment_days(self, row, joining_date, relieving_date):
+		amount, additional_amount = row.amount, row.additional_amount
+		timesheet_component = frappe.db.get_value(
+			"Salary Structure", self.salary_structure, "salary_component"
+		)
+
+		if (
+			self.salary_structure
+			and cint(row.depends_on_payment_days)
+			and cint(self.total_working_days)
+			and not (
+				row.additional_salary and row.default_amount
+			)  # to identify overwritten additional salary
+			and (
+				row.salary_component != timesheet_component
+				or getdate(self.start_date) < joining_date
+				or (relieving_date and getdate(self.end_date) > relieving_date)
+			)
+		):
+
+			additional_amount = flt(
+				(flt(row.additional_amount) * flt(self.payment_days) / flt(self.total_working_days)),
+				row.precision("additional_amount"),
+			)
+			amount = (
+				flt(
+					(flt(row.default_amount) * flt(self.payment_days) / flt(self.total_working_days)),
+					row.precision("amount"),
+				)
+				+ additional_amount
+			)
+
+		elif (
+			not self.payment_days
+			and row.salary_component != timesheet_component
+			and cint(row.depends_on_payment_days)
+		):
+			amount, additional_amount = 0, 0
+		elif not row.amount:
+			amount = flt(row.default_amount) + flt(row.additional_amount)
+
+		# apply rounding
+		if frappe.get_cached_value(
+			"Salary Component", row.salary_component, "round_to_the_nearest_integer"
+		):
+			amount, additional_amount = rounded(amount or 0), rounded(additional_amount or 0)
+
+		return amount, additional_amount
 
 	def calculate_variable_tax(self, payroll_period, tax_component):
 		# get Tax slab from salary structure assignment for the employee and payroll period
@@ -257,6 +306,106 @@ class CustomSalarySlip(SalarySlip):
 		if flt(current_tax_amount) < 0:
 			current_tax_amount = 0
 		return current_tax_amount
+	def get_working_days_details(
+		self, joining_date=None, relieving_date=None, lwp=None, for_preview=0
+	):
+		payroll_based_on = frappe.db.get_value("Payroll Settings", None, "payroll_based_on")
+		include_holidays_in_total_working_days = frappe.db.get_single_value(
+			"Payroll Settings", "include_holidays_in_total_working_days"
+		)
+		if self.payroll_period:
+			payroll_period=frappe.db.get_value("Payroll Period",self.payroll_period,['start_date','end_date'],as_dict=True)
+			total_no_days=get_total_days(payroll_period.get('start_date'),payroll_period.get('end_date')+timedelta(days=1))
+			total_no_weekend_days=get_total_weekend_days(payroll_period.get('start_date'),payroll_period.get('end_date'))
+			working_days=(total_no_days-total_no_weekend_days)/12
+		else:
+			working_days = date_diff(self.end_date, self.start_date) + 1
+		working_days_list = [add_days(self.start_date, i) for i in range(math.ceil(working_days))]
+
+		if for_preview:
+			self.total_working_days = working_days
+			self.payment_days = working_days
+			return
+
+		holidays = self.get_holidays_for_employee(self.start_date, self.end_date)
+
+		if not cint(include_holidays_in_total_working_days):
+			# working_days -= len(holidays)
+			# working_days_list = [cstr(day) for day in working_days_list if cstr(day) not in holidays]
+
+			if working_days < 0:
+				frappe.throw(_("There are more holidays than working days this month."))
+
+		if not payroll_based_on:
+			frappe.throw(_("Please set Payroll based on in Payroll settings"))
+
+		if payroll_based_on == "Attendance":
+			actual_lwp, absent = self.calculate_lwp_ppl_and_absent_days_based_on_attendance(holidays)
+			self.absent_days = absent
+		else:
+			actual_lwp = self.calculate_lwp_or_ppl_based_on_leave_application(holidays, working_days_list)
+
+		if not lwp:
+			lwp = actual_lwp
+		elif lwp != actual_lwp:
+			frappe.msgprint(
+				_("Leave Without Pay does not match with approved {} records").format(payroll_based_on)
+			)
+
+		self.leave_without_pay = lwp
+		self.total_working_days = working_days
+		payment_days = self.get_payment_days(
+			joining_date, relieving_date, include_holidays_in_total_working_days
+		)
+		if flt(payment_days) > flt(lwp):
+			self.payment_days = flt(payment_days) - flt(lwp)
+
+			if payroll_based_on == "Attendance":
+				self.payment_days -= flt(absent)
+
+			consider_unmarked_attendance_as = (
+				frappe.db.get_value("Payroll Settings", None, "consider_unmarked_attendance_as") or "Present"
+			)
+
+			if payroll_based_on == "Attendance" and consider_unmarked_attendance_as == "Absent":
+				unmarked_days = self.get_unmarked_days(include_holidays_in_total_working_days)
+				self.absent_days += unmarked_days  # will be treated as absent
+				self.payment_days -= unmarked_days
+			if payment_days>working_days:
+				self.payment_days=working_days
+		else:
+			self.payment_days = 0
+
+	def get_payment_days(self, joining_date, relieving_date, include_holidays_in_total_working_days):
+		if not joining_date:
+			joining_date, relieving_date = frappe.get_cached_value(
+				"Employee", self.employee, ["date_of_joining", "relieving_date"]
+			)
+
+		start_date = getdate(self.start_date)
+		if joining_date:
+			if getdate(self.start_date) <= joining_date <= getdate(self.end_date):
+				start_date = joining_date
+			elif joining_date > getdate(self.end_date):
+				return
+
+		end_date = getdate(self.end_date)
+		if relieving_date:
+			if getdate(self.start_date) <= relieving_date <= getdate(self.end_date):
+				end_date = relieving_date
+			elif relieving_date < getdate(self.start_date):
+				frappe.throw(_("Employee relieved on {0} must be set as 'Left'").format(relieving_date))
+
+		payment_days = date_diff(end_date, start_date) + 1
+
+		if not cint(include_holidays_in_total_working_days):
+			holidays = self.get_holidays_for_employee(start_date, end_date)
+			payment_days -= len(holidays)
+
+		payment_days -= get_total_weekend_days(start_date,end_date)
+
+
+		return payment_days
 
 def get_retirement_annuity(self):
 	ra = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, order_by='effective_from')
@@ -319,3 +468,26 @@ def get_remaining_sub_periods(employee, start_date, end_date, payroll_frequency,
 				})
 	salary_slips = flt(salary_slips[0][0]) if salary_slips else 0
 	return sub_period #- salary_slips
+
+# Get total no of days in a given period
+def get_total_days(year_start,year_end):
+	year_start = year_start
+	year_end = year_end
+	total_days = (year_end - year_start).days
+	return total_days
+
+# Get total no of weekend days(SATURDAY,SUNDAY) in a given period
+def get_total_weekend_days(year_start,year_end):
+	year_start = year_start
+	year_end = year_end
+	delta = timedelta(days=1)
+
+	weekend = 0
+
+	while year_start <= year_end:
+		if year_start.weekday() in [calendar.SATURDAY,calendar.SUNDAY]:
+			weekend += 1
+		year_start += delta
+
+	return weekend
+
