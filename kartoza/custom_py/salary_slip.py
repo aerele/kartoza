@@ -1,10 +1,18 @@
 import frappe
 from hrms.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data, calculate_tax_by_tax_slab
-from datetime import date,datetime
+from datetime import date,datetime, timedelta
 from hrms.payroll.doctype.payroll_period.payroll_period import get_period_factor, get_payroll_period
 from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
 from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
-from frappe.utils import flt
+from frappe.utils import (
+	add_days,
+	cint,
+	date_diff,
+	flt,
+	getdate
+)
+import math
+import calendar
 
 class CustomSalarySlip(SalarySlip):
 	def add_tax_components(self):
@@ -129,6 +137,86 @@ class CustomSalarySlip(SalarySlip):
 		self.taxable_value = taxable_income.taxable_earnings
 		return taxable_income
 
+	def get_working_days_details(
+		self, joining_date=None, relieving_date=None, lwp=None, for_preview=0
+	):
+		payroll_based_on = frappe.db.get_value("Payroll Settings", None, "payroll_based_on")
+		include_holidays_in_total_working_days = frappe.db.get_single_value(
+			"Payroll Settings", "include_holidays_in_total_working_days"
+		)
+
+		if not (joining_date and relieving_date):
+			joining_date, relieving_date = self.get_joining_and_relieving_dates()
+
+		if self.payroll_period:
+			payroll_period=frappe.db.get_value("Payroll Period",self.payroll_period,['start_date','end_date'],as_dict=True)
+			total_no_days=get_total_days(payroll_period.get('start_date'),payroll_period.get('end_date')+timedelta(days=1))
+			total_no_weekend_days=get_total_weekend_days(payroll_period.get('start_date'),payroll_period.get('end_date'))
+			working_days=(total_no_days-total_no_weekend_days)/12
+		else:
+			working_days = date_diff(self.end_date, self.start_date) + 1
+		working_days_list = [add_days(self.start_date, i) for i in range(math.ceil(working_days))]
+
+		if for_preview:
+			self.total_working_days = working_days
+			self.payment_days = working_days
+			return
+
+		holidays = self.get_holidays_for_employee(self.start_date, self.end_date)
+
+		if not cint(include_holidays_in_total_working_days):
+			# working_days_list = [i for i in working_days_list if i not in holidays]
+
+			# working_days -= len(holidays)
+			if working_days < 0:
+				frappe.throw(_("There are more holidays than working days this month."))
+
+		if not payroll_based_on:
+			frappe.throw(_("Please set Payroll based on in Payroll settings"))
+
+		if payroll_based_on == "Attendance":
+			actual_lwp, absent = self.calculate_lwp_ppl_and_absent_days_based_on_attendance(
+				holidays, relieving_date
+			)
+			self.absent_days = absent
+		else:
+			actual_lwp = self.calculate_lwp_or_ppl_based_on_leave_application(
+				holidays, working_days_list, relieving_date
+			)
+
+		if not lwp:
+			lwp = actual_lwp
+		elif lwp != actual_lwp:
+			frappe.msgprint(
+				_("Leave Without Pay does not match with approved {} records").format(payroll_based_on)
+			)
+
+		self.leave_without_pay = lwp
+		self.total_working_days = working_days
+
+		payment_days = self.get_payment_days(
+			joining_date, relieving_date, include_holidays_in_total_working_days
+		)
+
+		if flt(payment_days) > flt(lwp):
+			self.payment_days = flt(payment_days) - flt(lwp)
+
+			if payroll_based_on == "Attendance":
+				self.payment_days -= flt(absent)
+
+			consider_unmarked_attendance_as = (
+				frappe.db.get_value("Payroll Settings", None, "consider_unmarked_attendance_as") or "Present"
+			)
+
+			if payroll_based_on == "Attendance" and consider_unmarked_attendance_as == "Absent":
+				unmarked_days = self.get_unmarked_days(include_holidays_in_total_working_days)
+				self.absent_days += unmarked_days  # will be treated as absent
+				self.payment_days -= unmarked_days
+			if payment_days>working_days:
+				self.payment_days=working_days
+		else:
+			self.payment_days = 0
+
 	def get_taxable_earnings_for_prev_period(self, start_date, end_date, allow_tax_exemption=False):
 		exempted_amount = 0
 		taxable_earnings = self.get_salary_slip_details(
@@ -188,6 +276,28 @@ def get_medical_aid(self, dependant):
 		if dependant:
 			medical_aid = (medical_aid + (dependant * doc.additional_dependant)) or 0
 	return medical_aid
+
+
+def get_total_days(year_start,year_end):
+	year_start = year_start
+	year_end = year_end
+	total_days = (year_end - year_start).days
+	return total_days
+
+# Get total no of weekend days(SATURDAY,SUNDAY) in a given period
+def get_total_weekend_days(year_start,year_end):
+	year_start = year_start
+	year_end = year_end
+	delta = timedelta(days=1)
+
+	weekend = 0
+
+	while year_start <= year_end:
+		if year_start.weekday() in [calendar.SATURDAY,calendar.SUNDAY]:
+			weekend += 1
+		year_start += delta
+
+	return weekend
 
 
 def get_tax_rebate(self, dob):
