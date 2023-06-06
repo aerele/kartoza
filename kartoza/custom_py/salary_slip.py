@@ -148,13 +148,19 @@ class CustomSalarySlip(SalarySlip):
 		if not (joining_date and relieving_date):
 			joining_date, relieving_date = self.get_joining_and_relieving_dates()
 
-		if self.payroll_period:
-			payroll_period=frappe.db.get_value("Payroll Period",self.payroll_period,['start_date','end_date'],as_dict=True)
-			total_no_days=get_total_days(payroll_period.get('start_date'),payroll_period.get('end_date')+timedelta(days=1))
-			total_no_weekend_days=get_total_weekend_days(payroll_period.get('start_date'),payroll_period.get('end_date'))
-			working_days=(total_no_days-total_no_weekend_days)/12
-		else:
-			working_days = date_diff(self.end_date, self.start_date) + 1
+		# if self.payroll_period:
+			# payroll_period=frappe.db.get_value("Payroll Period",self.payroll_period,['start_date','end_date'],as_dict=True)
+		if type(self.start_date) == str:
+			self.start_date = datetime.strptime(self.start_date,"%Y-%m-%d").date()
+		if type(self.end_date) == str:
+			self.end_date = datetime.strptime(self.end_date,"%Y-%m-%d").date()
+		start_date = self.start_date.replace(month=1).replace(day=1)
+		end_date = self.end_date.replace(month=12).replace(day=31)
+		total_no_days=get_total_days(start_date, end_date+timedelta(days=1))
+		total_no_weekend_days=get_total_weekend_days(start_date, end_date)
+		working_days=(total_no_days-total_no_weekend_days)/12
+		# else:
+		# 	working_days = date_diff(self.end_date, self.start_date) + 1
 		working_days_list = [add_days(self.start_date, i) for i in range(math.ceil(working_days))]
 
 		if for_preview:
