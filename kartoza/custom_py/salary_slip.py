@@ -46,7 +46,7 @@ class CustomSalarySlip(SalarySlip):
 		# self.payroll_period = frappe.db.get_value('Payroll Period', {"start_date": ("<=", self.start_date),
 		# "end_date": (">=", self.end_date), "company": self.company })
 
-		self.payroll_period = get_payroll_period(self.start_date, self.end_date, self.company)
+		# self.payroll_period = get_payroll_period(self.start_date, self.end_date, self.company)
 
 		super().calculate_net_pay()
 
