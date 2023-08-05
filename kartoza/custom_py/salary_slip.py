@@ -1,5 +1,5 @@
 import frappe
-from hrms.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data, calculate_tax_by_tax_slab
+from hrms.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data, calculate_tax_by_tax_slab, rounded
 from datetime import date,datetime, timedelta
 from hrms.payroll.doctype.payroll_period.payroll_period import get_period_factor, get_payroll_period
 from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
@@ -257,6 +257,53 @@ class CustomSalarySlip(SalarySlip):
 
 		return (taxable_earnings + opening_taxable_earning) - exempted_amount - ra, exempted_amount
 
+	def get_amount_based_on_payment_days(self, row, joining_date, relieving_date):
+		amount, additional_amount = row.amount, row.additional_amount
+		timesheet_component = frappe.db.get_value(
+			"Salary Structure", self.salary_structure, "salary_component"
+		)
+
+		if (
+			self.salary_structure
+			and cint(row.depends_on_payment_days)
+			and flt(self.total_working_days)
+			and not (
+				row.additional_salary and row.default_amount
+			)  # to identify overwritten additional salary
+			and (
+				row.salary_component != timesheet_component
+				or getdate(self.start_date) < joining_date
+				or (relieving_date and getdate(self.end_date) > relieving_date)
+			)
+		):
+			additional_amount = flt(
+				(flt(row.additional_amount) * flt(self.payment_days) / flt(self.total_working_days)),
+				row.precision("additional_amount"),
+			)
+			amount = (
+				flt(
+					(flt(row.default_amount) * flt(self.payment_days) / flt(self.total_working_days)),
+					row.precision("amount"),
+				)
+				+ additional_amount
+			)
+
+		elif (
+			not self.payment_days
+			and row.salary_component != timesheet_component
+			and cint(row.depends_on_payment_days)
+		):
+			amount, additional_amount = 0, 0
+		elif not row.amount:
+			amount = flt(row.default_amount) + flt(row.additional_amount)
+
+		# apply rounding
+		if frappe.get_cached_value(
+			"Salary Component", row.salary_component, "round_to_the_nearest_integer"
+		):
+			amount, additional_amount = rounded(amount or 0), rounded(additional_amount or 0)
+
+		return amount, additional_amount
 
 def get_retirement_annuity(self):
 	ra = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, order_by='effective_from')
