@@ -51,6 +51,7 @@ class CustomSalarySlip(SalarySlip):
 		super().calculate_net_pay()
 
 		if self.payroll_period:
+			self.payroll_period_ = self.payroll_period.name
 			self.remaining_sub_periods = get_remaining_sub_periods(
 				self.employee, self.start_date, self.end_date, self.payroll_frequency, self.payroll_period
 			)
