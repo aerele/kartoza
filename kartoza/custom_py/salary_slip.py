@@ -1,20 +1,30 @@
-import frappe
-from hrms.payroll.doctype.salary_slip.salary_slip import SalarySlip, get_salary_component_data, calculate_tax_by_tax_slab, rounded
-from datetime import date,datetime, timedelta
-from hrms.payroll.doctype.payroll_period.payroll_period import get_period_factor, get_payroll_period
-from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import get_benefit_component_amount
-from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import get_benefit_claim_amount
-from frappe.utils import (
-	add_days,
-	cint,
-	date_diff,
-	flt,
-	getdate
-)
-import math
 import calendar
+import math
+from datetime import date, datetime, timedelta
+
+import frappe
+from frappe.utils import add_days, cint, date_diff, flt, getdate
+from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import \
+    get_benefit_component_amount
+from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import \
+    get_benefit_claim_amount
+from hrms.payroll.doctype.payroll_period.payroll_period import (
+    get_payroll_period, get_period_factor)
+from hrms.payroll.doctype.salary_slip.salary_slip import (
+    SalarySlip, calculate_tax_by_tax_slab, get_salary_component_data, rounded)
+from kartoza.custom_py.payroll_entry import (get_current_block_period,
+                                             get_employee_frequency_map,
+                                             is_payroll_processed)
+
 
 class CustomSalarySlip(SalarySlip):
+	def validate(self):
+		super().validate()
+		frequency = get_current_block_period(self)
+		employee_frequency = get_employee_frequency_map()
+		if self.employee in employee_frequency and is_payroll_processed(self.employee, frequency[employee_frequency[self.employee]]):
+			frappe.throw(" Salary Slip already created for current {0}".format(employee_frequency[self.employee]))
+
 	def add_tax_components(self):
 		# Calculate variable_based_on_taxable_salary after all components updated in salary slip
 		tax_components, self.other_deduction_components = [], []

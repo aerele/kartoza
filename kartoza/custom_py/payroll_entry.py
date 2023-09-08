@@ -1,8 +1,102 @@
 import frappe
-from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry
+from hrms.payroll.doctype.payroll_entry.payroll_entry import PayrollEntry, create_salary_slips_for_employees, _
+from hrms.payroll.doctype.payroll_period.payroll_period import get_payroll_period
+from datetime import datetime, timedelta
+from dateutil.relativedelta import relativedelta
 
 
+FREQUENCY = {
+	# "Monthly" : 1,
+	"Quarterly" : 3,
+	"Half-Yearly" : 6,
+	"Yearly" : 12
+}
+
+def get_current_block(frequency, date, payroll_period):
+	start_date = payroll_period.start_date
+	end_date = payroll_period.end_date
+	used_block = 0
+	while True:
+		start_date = datetime.strptime(str(start_date), "%Y-%m-%d").date()
+		end_date = (start_date + relativedelta(months=FREQUENCY[frequency]) - timedelta(days=1))
+
+		date = datetime.strptime(str(date),"%Y-%m-%d").date()
+		if start_date <= date and end_date >= date:
+			return frappe._dict({
+				"start_date": start_date,
+				"end_date": end_date
+			})
+		else:
+			start_date = end_date + timedelta(days=1)
+			used_block += 1
+
+
+
+def get_current_block_period(self):
+	payroll_period = get_payroll_period(self.start_date, self.end_date, self.company)
+	payroll_period_doc = frappe.get_doc("Payroll Period", payroll_period)
+	frequency_map = {}
+	for freq in FREQUENCY:
+		frequency_map[freq] = get_current_block(freq, self.start_date, payroll_period_doc)
+	return frequency_map
+
+def get_employee_frequency_map():
+	emp_map = {}
+	for i in frappe.db.get_all("Employee Frequency Detail", ["employee", "frequency"]):
+		emp_map[i.employee] = i.frequency
+	return emp_map
+
+def is_payroll_processed(employee, frequency):
+	return frappe.db.get_value("Salary Slip", {"employee": employee, "start_date":['>=', frequency.start_date], "end_date":["<=", frequency.end_date], "docstatus":1})
 class CustomPayrollEntry(PayrollEntry):
+	@frappe.whitelist()
+	def create_salary_slips(self):
+		"""
+		Creates salary slip for selected employees if already not created
+		"""
+		self.check_permission("write")
+		employees = []
+		frequency = get_current_block_period(self)
+		employee_frequency = get_employee_frequency_map()
+		for emp in self.employees:
+			if emp.employee in employee_frequency and is_payroll_processed(emp.employee, frequency[employee_frequency[emp.employee]]):
+				continue
+			employees.append(emp.employee)
+
+		if employees:
+			args = frappe._dict(
+				{
+					"salary_slip_based_on_timesheet": self.salary_slip_based_on_timesheet,
+					"payroll_frequency": self.payroll_frequency,
+					"start_date": self.start_date,
+					"end_date": self.end_date,
+					"company": self.company,
+					"posting_date": self.posting_date,
+					"deduct_tax_for_unclaimed_employee_benefits": self.deduct_tax_for_unclaimed_employee_benefits,
+					"deduct_tax_for_unsubmitted_tax_exemption_proof": self.deduct_tax_for_unsubmitted_tax_exemption_proof,
+					"payroll_entry": self.name,
+					"exchange_rate": self.exchange_rate,
+					"currency": self.currency,
+				}
+			)
+			if len(employees) > 30 or frappe.flags.enqueue_payroll_entry:
+				self.db_set("status", "Queued")
+				frappe.enqueue(
+					create_salary_slips_for_employees,
+					timeout=600,
+					employees=employees,
+					args=args,
+					publish_progress=False,
+				)
+				frappe.msgprint(
+					_("Salary Slip creation is queued. It may take a few minutes"),
+					alert=True,
+					indicator="blue",
+				)
+			else:
+				create_salary_slips_for_employees(employees, args, publish_progress=False)
+				# since this method is called via frm.call this doc needs to be updated manually
+				self.reload()
 	def get_salary_components(self, component_type):
 		salary_components = super().get_salary_components(component_type)
 		salary_slips = self.get_sal_slip_list(ss_status=1, as_dict=True)
