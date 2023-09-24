@@ -3,7 +3,9 @@ import math
 from datetime import date, datetime, timedelta
 
 import frappe
-from frappe.utils import add_days, cint, date_diff, flt, getdate
+from frappe import _
+from frappe.utils import (add_days, cint, date_diff, flt, get_link_to_form,
+                          getdate)
 from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import \
     get_benefit_component_amount
 from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import \
@@ -24,6 +26,17 @@ class CustomSalarySlip(SalarySlip):
 		employee_frequency = get_employee_frequency_map()
 		if self.employee in employee_frequency and is_payroll_processed(self.employee, frequency[employee_frequency[self.employee]]):
 			frappe.throw(" Salary Slip already created for current {0}".format(employee_frequency[self.employee]))
+		self.validate_component_account()
+
+	def validate_component_account(self):
+		for component_type in ["earnings", "deductions"]:
+			for row in self.get(component_type):
+				if not frappe.db.get_value("Salary Component Account", {"parent": row.salary_component, "company": self.company}, "account"):
+					frappe.throw(
+						_("Please set account in Salary Component {0}").format(
+							get_link_to_form("Salary Component", row.salary_component)
+						)
+					)
 
 	def add_tax_components(self):
 		# Calculate variable_based_on_taxable_salary after all components updated in salary slip
@@ -231,6 +244,9 @@ class CustomSalarySlip(SalarySlip):
 				self.payment_days -= unmarked_days
 			if payment_days>working_days:
 				self.payment_days=working_days
+
+			if self.payment_days < 0:
+				self.payment_days = 0
 		else:
 			self.payment_days = 0
 
