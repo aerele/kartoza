@@ -433,10 +433,16 @@ def before_install():
 
 def make_custom_fields():
 	custom_fields = {
-		'HR Settings': [
-		]
+		'HR Settings': [],
+		"Employee":[]
 	}
+
 	if not frappe.get_meta("HR Settings").get_field("amount_per_kilometer"):
 		custom_fields["HR Settings"].append(dict(fieldname='amount_per_kilometer', label='Amount Per Kilometer',
 						fieldtype='Currency', insert_after='emp_created_by'))
+
+	if not frappe.get_meta("Employee").get_field(""):
+		custom_fields["Employee"].append(dict(fieldname='payroll_payable_account', label='Payroll Payable Bank Account',
+						fieldtype='Link', options="Bank Account", insert_after='payroll_cost_center'))
+
 	create_custom_fields(custom_fields)

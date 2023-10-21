@@ -39,6 +39,8 @@ fixtures = [
 
 # include js in doctype views
 doctype_js = {
+	"Payroll Entry" : "custom_js/payroll_entry.js",
+	"Employee" : "custom_js/employee.js",
 	"Employee Benefit Claim" : "custom_js/employee_benefit_claim.js",
 	"Salary Structure": "custom_js/salary_structure.js"
 }
@@ -73,6 +75,11 @@ _payroll_entry.get_payroll_entry_bank_entries = _custom_payroll_entry.get_payrol
 
 before_install = "kartoza.install.before_install"
 after_install = "kartoza.install.after_install"
+
+after_migrate = [
+	"kartoza.install.make_custom_fields"
+]
+
 # after_install = "kartoza.install.after_install"
 
 # Desk Notifications

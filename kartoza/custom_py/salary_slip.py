@@ -58,9 +58,9 @@ class CustomSalarySlip(SalarySlip):
 			self.tax_slab = self.get_income_tax_slabs()
 			self.compute_taxable_earnings_for_year()
 
-		self.component_based_veriable_tax = {}
+		self._component_based_variable_tax = {}
 		for d in tax_components:
-			self.component_based_veriable_tax.setdefault(d, {})
+			self._component_based_variable_tax.setdefault(d, {})
 			tax_amount = self.calculate_variable_based_on_taxable_salary(d)
 			tax_row = get_salary_component_data(d)
 			self.update_component_row(tax_row, tax_amount, "deductions")
