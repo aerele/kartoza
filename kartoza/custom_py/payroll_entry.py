@@ -65,7 +65,8 @@ class CustomPayrollEntry(PayrollEntry):
 				i.custom_payroll_payable_bank_account = frappe.db.get_value("Employee", i.employee, "payroll_payable_account")
 
 			if not i.custom_payroll_payable_bank_account:
-				frappe.throw("Payroll Payable Bank Account not found for Employee:{0}".format(i.employee))
+				frappe.throw("Payroll Payable Bank Account not found for Employee:<a href='/app/employee/{0}'><b>{0}</b></a>".format(i.employee))
+
 	@frappe.whitelist()
 	def create_salary_slips(self):
 		"""
