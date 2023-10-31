@@ -238,7 +238,7 @@ class CustomPayrollEntry(PayrollEntry):
 
 				if salary_slip_total > 0:
 					self.jv_for_company_contribution = True
-					self.create_journal_entry(salary_slip_total, "salary")
+					self.create_journal_entry(salary_slip_total, "Company Contribution")
 
 		self.payment_account = payment_account
 		self.bank_account = bank_account
