@@ -137,7 +137,6 @@ class CustomPayrollEntry(PayrollEntry):
 	@frappe.whitelist()
 	def make_payment_entry(self):
 		self.check_permission("write")
-		self.employee_based_payroll_payable_entries = {}
 		process_payroll_accounting_entry_based_on_employee = frappe.db.get_single_value(
 			"Payroll Settings", "process_payroll_accounting_entry_based_on_employee"
 		)
@@ -145,6 +144,7 @@ class CustomPayrollEntry(PayrollEntry):
 		bank_account = self.bank_account
 
 		for pay_account in self.selected_payment_account:
+			self.employee_based_payroll_payable_entries = {}
 			if self.selected_payment_account[pay_account] != 1:continue
 			emp_list = []
 			for employee in self.employees:
@@ -239,6 +239,7 @@ class CustomPayrollEntry(PayrollEntry):
 				if salary_slip_total > 0:
 					self.jv_for_company_contribution = True
 					self.create_journal_entry(salary_slip_total, "Company Contribution")
+					self.jv_for_company_contribution = False
 
 		self.payment_account = payment_account
 		self.bank_account = bank_account
