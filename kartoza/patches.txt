@@ -1,4 +1,4 @@
 [pre_model_sync]
 
 [post_model_sync]
-kartoza.patches.update_payroll_entry
+kartoza.patches.update_payroll_entry #1
