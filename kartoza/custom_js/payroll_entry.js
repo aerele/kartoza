@@ -11,8 +11,7 @@ frappe.ui.form.on("Payroll Entry", {
 				frm
 					.add_custom_button(__("Make Bank Entry"), function () {
 						let field_list = [];
-						let date_list = [];
-						let exchange_list = [];
+
 						frm.doc.employees.forEach((row) => {
 							if (row.custom_payroll_payable_bank_account) {
 								if (row.custom_payroll_payable_bank_account in account_map)
@@ -37,6 +36,10 @@ frappe.ui.form.on("Payroll Entry", {
 									];
 							}
 						});
+						let company_currency = frappe.get_doc(
+							":Company",
+							frm.doc.company
+						).default_currency;
 						for (let account in account_map) {
 							let is_read_only = 0;
 							if (
@@ -58,8 +61,9 @@ frappe.ui.form.on("Payroll Entry", {
 									$(".employee-list").empty();
 									for (let account in account_map) {
 										if (d.get_value(account)) {
+
 											$(".employee-list").append(`
-												<tr style="width:100%;"  class="popup-tr"><td style="border-bottom: 1px solid #d4d4d4;width:100%;"><b>Employees paid with <a href="/app/bank-account/${account}">${account}</a></b></td></tr>
+												<div class="col-sm-12" style="border-bottom: 1px solid #d4d4d4;"><b>Employees paid with <a href="/app/bank-account/${account}">${account}</a></b></div>
 											`);
 											account_map[account].forEach((row) => {
 												let is_disabled = false
@@ -71,20 +75,20 @@ frappe.ui.form.on("Payroll Entry", {
 												) {
 													is_disabled = true
 												}
-												$(`.${row.employee}-tr`).remove()
+												$(`.${row.employee}-col`).remove()
+
 												$(".employee-list").append(`
-														<tr style="width:100%;" class="popup-tr ${row.employee}-tr"><td style="border-bottom: 1px solid #d4d4d4;width:100%;"><input type="checkbox" class="employee-checkbox" account="${account}" employee="${row.employee}" checked ${!is_disabled?"disabled":""}><a href="/app/employee/${row.employee}" target="_blank" >${row.employee}: ${row.employee_name}</a></td></tr>
-													`);
+													<div class="col-sm-6 ${row.employee}-col" style="border-bottom: 1px solid #d4d4d4;"><input type="checkbox" class="employee-checkbox" account="${account}" employee="${row.employee}" checked ${!is_disabled?"disabled":""}><a href="/app/employee/${row.employee}" target="_blank" >${row.employee}: ${row.employee_name}</a></div>
+												`);
 											});
 										}
 									}
 								},
 							});
-							let company_currency = frappe.get_doc(
-								":Company",
-								frm.doc.company
-							).default_currency;
-							date_list.push({
+							field_list.push({
+								fieldtype: "Column Break"
+							})
+							field_list.push({
 								label: "Payment Date" + " <small>(" + account + ")</small>",
 								fieldname: account + "_date",
 								fieldtype: "Date",
@@ -102,25 +106,23 @@ frappe.ui.form.on("Payroll Entry", {
 										},
 									});
 								},
-							});
-							exchange_list.push({
+							})
+							field_list.push({
+								fieldtype: "Column Break"
+							})
+							field_list.push({
 								label: "Exchange Rate" + " <small>(" + account + ")</small>",
 								fieldname: account + "_ex_rate",
 								fieldtype: "Float",
 								precision: 9,
 								read_only: is_read_only,
-							});
+							})
+							field_list.push({ fieldtype: "Section Break" });
 						}
-						field_list.push({ fieldtype: "Column Break" });
-						field_list = [...field_list, ...date_list];
-						field_list.push({ fieldtype: "Column Break" });
-						field_list = [...field_list, ...exchange_list];
-						field_list.push({ fieldtype: "Section Break" });
 						field_list.push({
 							fieldname: "employee_list",
 							fieldtype: "Text",
-							default:
-								"<table class='employee-list' style='width:100%;'></table>",
+							default: '<div class="container" style="margin:0px;width:100%;"><div class="row employee-list"></div></div>',
 							read_only: 1,
 						});
 						const d = new frappe.ui.Dialog({
