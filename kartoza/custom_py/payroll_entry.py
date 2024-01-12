@@ -6,13 +6,14 @@ import erpnext
 import frappe
 from erpnext.accounts.doctype.accounting_dimension.accounting_dimension import \
     get_accounting_dimensions
-from frappe.utils import flt
+from erpnext.setup.utils import get_exchange_rate
+from frappe.query_builder.functions import Coalesce, Count
+from frappe.utils import (DATE_FORMAT, add_days, add_to_date, cint, comma_and,
+                          date_diff, flt, get_link_to_form, getdate)
 from hrms.payroll.doctype.payroll_entry.payroll_entry import (
     PayrollEntry, _, create_salary_slips_for_employees)
 from hrms.payroll.doctype.payroll_period.payroll_period import \
     get_payroll_period
-
-from erpnext.setup.utils import get_exchange_rate
 
 FREQUENCY = {
 	# "Monthly" : 1,
@@ -63,15 +64,24 @@ class CustomPayrollEntry(PayrollEntry):
 	def validate(self):
 		super().validate()
 		for i in self.employees:
+
+			if not i.custom_employee_type:
+				i.custom_employee_type = frappe.db.get_value("Employee", i.employee, "custom_employee_type")
+
 			if not i.custom_payroll_payable_bank_account:
 				i.custom_payroll_payable_bank_account = frappe.db.get_value("Employee", i.employee, "payroll_payable_account")
-				if i.custom_payroll_payable_bank_account:
-					account = frappe.db.get_value("Bank Account", i.custom_payroll_payable_bank_account, "account")
-					if account:
-						i.custom_bank_account_currency = frappe.db.get_value("Account", account, "account_currency")
+
+			if i.custom_payroll_payable_bank_account:
+				account = frappe.db.get_value("Bank Account", i.custom_payroll_payable_bank_account, "account")
+				if account:
+					i.custom_bank_account_currency = frappe.db.get_value("Account", account, "account_currency")
 
 			if not i.custom_payroll_payable_bank_account:
 				frappe.throw("Payroll Payable Bank Account not found for Employee:<a href='/app/employee/{0}'><b>{0}</b></a>".format(i.employee))
+
+			if not i.custom_employee_type:
+				frappe.throw("Employee Type not found for Employee:<a href='/app/employee/{0}'><b>{0}</b></a>".format(i.employee))
+
 
 	@frappe.whitelist()
 	def create_salary_slips(self):
@@ -161,6 +171,8 @@ class CustomPayrollEntry(PayrollEntry):
 			account = frappe.db.get_value("Bank Account", pay_account, "account")
 			self.bank_account = pay_account
 			self.payment_account = account
+			self.payment_account_currency = frappe.db.get_value("Account", account, "account_currency")
+			self.company_currency = frappe.db.get_value("Company", self.company, "default_currency")
 
 			salary_slip_name_list = frappe.db.sql(
 				""" select t1.name from `tabSalary Slip` t1
@@ -250,14 +262,15 @@ class CustomPayrollEntry(PayrollEntry):
 					if is_company_contribution_created:
 						continue
 					for sal_detail in salary_slip.company_contribution:
-						if process_payroll_accounting_entry_based_on_employee:
-							self.set_employee_based_payroll_payable_entries(
-								"company_contribution",
-								salary_slip.employee,
-								sal_detail.amount,
-								salary_slip.salary_structure,
-							)
-						salary_slip_total += sal_detail.amount
+						if self.payment_account_currency == self.company_currency and frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and not frappe.db.get_value("Salary Component", sal_detail.salary_component, "custom_is_sdl"):
+							if process_payroll_accounting_entry_based_on_employee:
+								self.set_employee_based_payroll_payable_entries(
+									"company_contribution",
+									salary_slip.employee,
+									sal_detail.amount,
+									salary_slip.salary_structure,
+								)
+							salary_slip_total += sal_detail.amount
 
 				if salary_slip_total > 0:
 					self.jv_for_company_contribution = True
@@ -267,23 +280,112 @@ class CustomPayrollEntry(PayrollEntry):
 		self.payment_account = payment_account
 		self.bank_account = bank_account
 
+	def get_sal_slip_list(self, ss_status, as_dict=False):
+		"""
+		Returns list of salary slips based on selected criteria
+		"""
+		employees = [i.employee for i in self.employees]
+		ss = frappe.qb.DocType("Salary Slip")
+		ss_list = (
+			frappe.qb.from_(ss)
+			.select(ss.name, ss.salary_structure)
+			.where(
+				(ss.docstatus == ss_status)
+				& (ss.start_date >= self.start_date)
+				& (ss.end_date <= self.end_date)
+				& (ss.payroll_entry == self.name)
+				& ((ss.journal_entry.isnull()) | (ss.journal_entry == ""))
+				& (Coalesce(ss.salary_slip_based_on_timesheet, 0) == self.salary_slip_based_on_timesheet)
+				& (ss.employee.isin(tuple(employees)))
+			)
+		).run(as_dict=as_dict)
+
+		return ss_list
+
+	def get_salary_component_account(self, salary_component):
+		if frappe.db.get_value("Salary Component", salary_component, "type") == "Earning":
+			return self.earnings_payable_account
+
+		account = frappe.db.get_value(
+			"Salary Component Account", {"parent": salary_component, "company": self.company}, "account"
+		)
+
+		if not account:
+			frappe.throw(
+				_("Please set account in Salary Component {0}").format(
+					get_link_to_form("Salary Component", salary_component)
+				)
+			)
+
+		return account
+
+	def get_salary_components(self, component_type):
+		salary_slips = self.get_sal_slip_list(ss_status=1, as_dict=True)
+		employees = [i.employee for i in self.employees]
+
+		if salary_slips:
+			ss = frappe.qb.DocType("Salary Slip")
+			ssd = frappe.qb.DocType("Salary Detail")
+			salary_components = (
+				frappe.qb.from_(ss)
+				.join(ssd)
+				.on(ss.name == ssd.parent)
+				.select(
+					ssd.salary_component,
+					ssd.amount,
+					ssd.parentfield,
+					ssd.additional_salary,
+					ss.salary_structure,
+					ss.employee,
+				)
+				.where(
+					(ssd.parentfield == component_type) & (ss.name.isin(tuple([d.name for d in salary_slips ])) & (ss.employee.isin(tuple(employees))))
+				)
+			).run(as_dict=True)
+
+			return salary_components
+
+	def separate_based_on_employee_type(self):
+		employee_type_map = {}
+		for row in self.employees:
+			if row.custom_employee_type in employee_type_map:
+				employee_type_map[row.custom_employee_type].append(row)
+			else:
+				employee_type_map[row.custom_employee_type] = [row]
+
+
+		return employee_type_map
 
 	def make_accrual_jv_entry(self):
-		jv = super().make_accrual_jv_entry()
-		if jv:
-			doc = frappe.get_doc("Journal Entry", jv)
-			for i in doc.accounts:
-				if i.debit_in_account_currency:
-					frappe.db.set_value(i.doctype, i.name, 'reference_type', self.doctype)
-					frappe.db.set_value(i.doctype, i.name, 'reference_name', self.name)
+		self.backup_employees = self.employees
 
-				if i.party_type == "Employee" and i.party:
-					department = frappe.db.get_value("Employee", i.party, "department")
-					if department:
-						department_name = frappe.db.get_value("Department", department, "department_name")
-						business_unit = frappe.db.get_value("Business Unit", department_name)
-						if business_unit:
-							frappe.db.set_value(i.doctype, i.name, 'business_unit', business_unit)
+		employee_type_map = self.separate_based_on_employee_type()
+
+		for employee_type in employee_type_map:
+			self.earnings_payable_account = frappe.db.get_value("Employee Type", employee_type, "payroll_payable_account")
+			self.employees = employee_type_map[employee_type]
+			jv = super().make_accrual_jv_entry()
+			if jv:
+				doc = frappe.get_doc("Journal Entry", jv)
+				for i in doc.accounts:
+					if i.debit_in_account_currency:
+						frappe.db.set_value(i.doctype, i.name, 'reference_type', self.doctype)
+						frappe.db.set_value(i.doctype, i.name, 'reference_name', self.name)
+
+					if i.party_type == "Employee" and i.party:
+						department = frappe.db.get_value("Employee", i.party, "department")
+						if department:
+							department_name = frappe.db.get_value("Department", department, "department_name")
+							business_unit = frappe.db.get_value("Business Unit", department_name)
+							if business_unit:
+								frappe.db.set_value(i.doctype, i.name, 'business_unit', business_unit)
+
+						employee_type = frappe.db.get_value("Employee", i.party, "custom_employee_type")
+						if employee_type:
+							frappe.db.set_value(i.doctype, i.name, 'employee_type', employee_type)
+
+		self.employees = self.backup_employees
+
 
 		return jv
 
@@ -434,6 +536,10 @@ class CustomPayrollEntry(PayrollEntry):
 					business_unit = frappe.db.get_value("Business Unit", department_name)
 					if business_unit:
 						frappe.db.set_value(i.doctype, i.name, 'business_unit', business_unit)
+
+				employee_type = frappe.db.get_value("Employee", i.party, "custom_employee_type")
+				if employee_type:
+					frappe.db.set_value(i.doctype, i.name, 'employee_type', employee_type)
 
 
 

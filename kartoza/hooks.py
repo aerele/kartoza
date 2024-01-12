@@ -14,6 +14,7 @@ fixtures = [
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'variable']]	},
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'base']]	},
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Slip'], ["field_name", '=', 'payroll_entry']]	},
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", '=', 'custom_employee_type']]	},
 ]
 
 # Includes in <head>

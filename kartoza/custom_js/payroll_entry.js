@@ -69,7 +69,7 @@ frappe.ui.form.on("Payroll Entry", {
 												let is_disabled = false
 												if (
 													!(
-														row.is_bank_entry_created &&
+														row.is_bank_entry_created ||
 														row.is_company_contribution_created
 													)
 												) {
@@ -97,8 +97,8 @@ frappe.ui.form.on("Payroll Entry", {
 									frappe.call({
 										method: "erpnext.setup.utils.get_exchange_rate",
 										args: {
-											from_currency: company_currency,
-											to_currency: account_map[account][0].account_currency,
+											from_currency: account_map[account][0].account_currency,
+											to_currency: company_currency,
 											transaction_date: d.get_value(account + "_date"),
 										},
 										callback: function (r, rt) {
@@ -148,6 +148,10 @@ frappe.ui.form.on("Payroll Entry", {
 								for (const account in account_emp_map) {
 									if (!values[account + "_date"]) {
 										frappe.throw(`Posting date for ${account} is mandatory`);
+									}
+
+									if (!values[account + "_ex_rate"]){
+										frappe.throw("Exchange rate cannot be zero")
 									}
 
 									account_emp_map[account]["currency"] =
