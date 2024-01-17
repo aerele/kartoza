@@ -115,7 +115,7 @@ frappe.ui.form.on("Payroll Entry", {
 								fieldname: account + "_ex_rate",
 								fieldtype: "Float",
 								precision: 9,
-								read_only: is_read_only,
+								read_only: is_read_only || company_currency == account_map[account][0].account_currency?1:0,
 							})
 							field_list.push({ fieldtype: "Section Break" });
 						}
