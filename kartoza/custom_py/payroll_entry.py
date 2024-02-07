@@ -163,6 +163,19 @@ class CustomPayrollEntry(PayrollEntry):
 		payment_account = self.payment_account
 		bank_account = self.bank_account
 
+		self.company_currency = frappe.db.get_value("Company", self.company, "default_currency")
+		self.sdl_payment_bank_account = None
+
+		for employee in self.employees:
+			if employee.custom_bank_account_currency == self.company_currency:
+				self.sdl_payment_bank_account = employee.custom_payroll_payable_bank_account
+
+			if self.sdl_payment_bank_account:
+				break
+
+		self.sdl_payment_account = frappe.db.get_value("Bank Account", self.sdl_payment_bank_account, "account")
+		self.sdl_payment_account_currency = frappe.db.get_value("Account", self.sdl_payment_account, "account_currency")
+
 		for pay_account in self.selected_payment_account:
 			self.employee_based_payroll_payable_entries = {}
 			# if self.selected_payment_account[pay_account] != 1:continue
@@ -176,7 +189,6 @@ class CustomPayrollEntry(PayrollEntry):
 			self.bank_account = pay_account
 			self.payment_account = account
 			self.payment_account_currency = frappe.db.get_value("Account", account, "account_currency")
-			self.company_currency = frappe.db.get_value("Company", self.company, "default_currency")
 
 			salary_slip_name_list = frappe.db.sql(
 				""" select t1.name from `tabSalary Slip` t1
@@ -254,6 +266,8 @@ class CustomPayrollEntry(PayrollEntry):
 
 			if salary_slip_name_list and len(salary_slip_name_list) > 0:
 				salary_slip_total = 0
+				self.sdl_payment_amount = 0
+				self.provisional_payment = {}
 				for salary_slip_name in salary_slip_name_list:
 					salary_slip = frappe.get_doc("Salary Slip", salary_slip_name[0])
 					is_company_contribution_created = frappe.db.get_value("Payroll Employee Detail", {"parent":self.name, "employee": salary_slip.employee}, "custom_is_company_contribution_created")
@@ -265,18 +279,47 @@ class CustomPayrollEntry(PayrollEntry):
 								)
 					if is_company_contribution_created:
 						continue
+
+
+					department = frappe.db.get_value("Employee", salary_slip.employee, "department")
+					business_unit = None
+					if department:
+						department_name = frappe.db.get_value("Department", department, "department_name")
+						business_unit = frappe.db.get_value("Business Unit", department_name)
+
+					employee_type = frappe.db.get_value("Employee", salary_slip.employee, "custom_employee_type")
+
+
 					for sal_detail in salary_slip.company_contribution:
-						if self.payment_account_currency == self.company_currency and frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and not frappe.db.get_value("Salary Component", sal_detail.salary_component, "custom_is_sdl"):
-							if process_payroll_accounting_entry_based_on_employee:
-								self.set_employee_based_payroll_payable_entries(
-									"company_contribution",
-									salary_slip.employee,
-									sal_detail.amount,
-									salary_slip.salary_structure,
-								)
+						# if process_payroll_accounting_entry_based_on_employee:
+							# self.set_employee_based_payroll_payable_entries(
+							# 	"company_contribution",
+							# 	salary_slip.employee,
+							# 	sal_detail.amount,
+							# 	salary_slip.salary_structure,
+							# )
+						component_account = frappe.db.get_value("Salary Component Account", {"parent":sal_detail.salary_component, "company": self.company}, "account")
+						provisional_key = (component_account, business_unit, employee_type)
+						# if provisional_key not in self.provisional_payment:
+						# 	self.provisional_payment[provisional_key] = 0
+						self.provisional_payment[provisional_key] = self.provisional_payment.get(provisional_key, 0) + sal_detail.amount
+
+						if self.payment_account_currency != self.company_currency and frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and frappe.db.get_value("Salary Component", sal_detail.salary_component, "custom_is_sdl"):
+							self.sdl_payment_amount += sal_detail.amount
+						else:
 							salary_slip_total += sal_detail.amount
 
-				if salary_slip_total > 0:
+					for sal_detail in salary_slip.deductions:
+						variable_salary, income_tax_component = frappe.db.get_value("Salary Component", sal_detail.salary_component, ["variable_based_on_taxable_salary", "is_income_tax_component"])
+						if (variable_salary and income_tax_component) or (frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and not frappe.db.get_value("Salary Component", sal_detail.salary_component, "custom_is_sdl")):
+							component_account = frappe.db.get_value("Salary Component Account", {"parent":sal_detail.salary_component, "company": self.company}, "account")
+							provisional_key = (component_account, business_unit, employee_type)
+							# if provisional_key not in self.provisional_payment:
+							# 	self.provisional_payment[provisional_key] = 0
+							self.provisional_payment[provisional_key] = self.provisional_payment.get(provisional_key, 0) + sal_detail.amount
+							salary_slip_total += sal_detail.amount
+
+				if salary_slip_total > 0 or self.sdl_payment_amount > 0:
 					self.jv_for_company_contribution = True
 					self.create_journal_entry(salary_slip_total, "Company Contribution")
 					self.jv_for_company_contribution = False
@@ -696,81 +739,123 @@ class CustomPayrollEntry(PayrollEntry):
 
 		amount = je_payment_amount / exchange_rate
 
-		accounts.append(
-			self.update_accounting_dimensions(
-				{
-					"account": self.payment_account,
-					"bank_account": self.bank_account,
-					"credit_in_account_currency": flt(amount, precision),
-					"exchange_rate": flt(exchange_rate),
-					"cost_center": self.cost_center,
-				},
-				accounting_dimensions,
-			)
-		)
-
-
-
-		if self.employee_based_payroll_payable_entries:
-			for employee, employee_details in self.employee_based_payroll_payable_entries.items():
-				if self.get("jv_for_company_contribution"):
-					if employee_details.get("is_company_contribution_created"):
-						continue
-					je_payment_amount = employee_details.get("company_contribution") or 0
-				else:
-					if employee_details.get("is_bank_entry_created"):
-						continue
-					je_payment_amount = employee_details.get("earnings") - (
-						employee_details.get("deductions") or 0
-					)
-
-
-				exchange_rate, amount = self.get_amount_and_exchange_rate_for_journal_entry(
-					self.payment_account, je_payment_amount, company_currency, currencies
-				)
-
-				cost_centers = self.get_payroll_cost_centers_for_employee(
-					employee, employee_details.get("salary_structure")
-				)
-
-				for cost_center, percentage in cost_centers.items():
-					amount_against_cost_center = flt(amount) * percentage / 100
-					accounts.append(
-						self.update_accounting_dimensions(
-							{
-								"account": payroll_payable_account,
-								"debit_in_account_currency": flt(amount_against_cost_center, precision),
-								"exchange_rate": flt(exchange_rate),
-								"reference_type": self.doctype,
-								"reference_name": self.name,
-								"party_type": "Employee",
-								"party": employee,
-								"custom_party_name": frappe.db.get_value("Employee", employee, "employee_name"),
-								"cost_center": cost_center,
-								"custom_is_payroll_entry": 0 if self.get("jv_for_company_contribution") else 1,
-								"custom_is_company_contribution": 1 if self.get("jv_for_company_contribution") else 0
-								# "business_unit": business_unit,
-							},
-							accounting_dimensions,
-						)
-					)
-		else:
-			exchange_rate, amount = self.get_amount_and_exchange_rate_for_journal_entry(
-				payroll_payable_account, je_payment_amount, company_currency, currencies
-			)
+		if amount:
 			accounts.append(
 				self.update_accounting_dimensions(
 					{
-						"account": payroll_payable_account,
-						"debit_in_account_currency": flt(amount, precision),
+						"account": self.payment_account,
+						"bank_account": self.bank_account,
+						"credit_in_account_currency": flt(amount, precision),
 						"exchange_rate": flt(exchange_rate),
-						"reference_type": self.doctype,
-						"reference_name": self.name,
 						"cost_center": self.cost_center,
 					},
 					accounting_dimensions,
 				)
 			)
+
+		if self.get("jv_for_company_contribution") and self.sdl_payment_amount:
+			accounts.append(
+				self.update_accounting_dimensions(
+					{
+						"account": self.sdl_payment_account,
+						"bank_account": self.sdl_payment_bank_account,
+						"credit_in_account_currency": flt(self.sdl_payment_amount, precision),
+						"exchange_rate": flt(1),
+						"cost_center": self.cost_center,
+					},
+					accounting_dimensions,
+				)
+			)
+
+
+
+		if self.get("jv_for_company_contribution"):
+			for acc in self.provisional_payment:
+				exchange_rate, amount = self.get_amount_and_exchange_rate_for_journal_entry(
+					acc[0], self.provisional_payment[acc], company_currency, currencies
+				)
+
+				row_account = self.update_accounting_dimensions(
+						{
+							"account": acc[0],
+							"debit_in_account_currency": flt(amount, precision),
+							"exchange_rate": flt(exchange_rate),
+							"reference_type": self.doctype,
+							"reference_name": self.name,
+							"cost_center": self.cost_center,
+						},
+						accounting_dimensions,
+					)
+
+				row_account["business_unit"] = acc[1]
+				row_account["employee_type"] = acc[2]
+
+				accounts.append(
+					row_account
+				)
+
+
+		else:
+			if self.employee_based_payroll_payable_entries:
+				for employee, employee_details in self.employee_based_payroll_payable_entries.items():
+					if self.get("jv_for_company_contribution"):
+						if employee_details.get("is_company_contribution_created"):
+							continue
+						je_payment_amount = employee_details.get("company_contribution") or 0
+					else:
+						if employee_details.get("is_bank_entry_created"):
+							continue
+						je_payment_amount = employee_details.get("earnings") - (
+							employee_details.get("deductions") or 0
+						)
+
+
+					exchange_rate, amount = self.get_amount_and_exchange_rate_for_journal_entry(
+						self.payment_account, je_payment_amount, company_currency, currencies
+					)
+
+					cost_centers = self.get_payroll_cost_centers_for_employee(
+						employee, employee_details.get("salary_structure")
+					)
+
+					for cost_center, percentage in cost_centers.items():
+						amount_against_cost_center = flt(amount) * percentage / 100
+						accounts.append(
+							self.update_accounting_dimensions(
+								{
+									"account": payroll_payable_account,
+									"debit_in_account_currency": flt(amount_against_cost_center, precision),
+									"exchange_rate": flt(exchange_rate),
+									"reference_type": self.doctype,
+									"reference_name": self.name,
+									"party_type": "Employee",
+									"party": employee,
+									"custom_party_name": frappe.db.get_value("Employee", employee, "employee_name"),
+									"cost_center": cost_center,
+									"custom_is_payroll_entry": 0 if self.get("jv_for_company_contribution") else 1,
+									"custom_is_company_contribution": 1 if self.get("jv_for_company_contribution") else 0
+									# "business_unit": business_unit,
+								},
+								accounting_dimensions,
+							)
+						)
+			else:
+				exchange_rate, amount = self.get_amount_and_exchange_rate_for_journal_entry(
+					payroll_payable_account, je_payment_amount, company_currency, currencies
+				)
+				accounts.append(
+					self.update_accounting_dimensions(
+						{
+							"account": payroll_payable_account,
+							"debit_in_account_currency": flt(amount, precision),
+							"exchange_rate": flt(exchange_rate),
+							"reference_type": self.doctype,
+							"reference_name": self.name,
+							"cost_center": self.cost_center,
+						},
+						accounting_dimensions,
+					)
+				)
 
 		if len(currencies) > 1:
 			multi_currency = 1
