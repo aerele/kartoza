@@ -86,6 +86,42 @@ class CustomPayrollEntry(PayrollEntry):
 		if employees_without_employee_type:
 			frappe.throw("Employee Type not found for below Employees<br /><br /><ul>{0}</ul>".format(employees_without_employee_type))
 
+	@frappe.whitelist()
+	def fill_employee_details(self):
+		self.set("employees", [])
+		employees = self.get_emp_list()
+		if not employees:
+			error_msg = _(
+				"No employees found for the mentioned criteria:<br>Company: {0}<br> Currency: {1}<br>Payroll Payable Account: {2}"
+			).format(
+				frappe.bold(self.company),
+				frappe.bold(self.currency),
+				frappe.bold(self.payroll_payable_account),
+			)
+			if self.branch:
+				error_msg += "<br>" + _("Branch: {0}").format(frappe.bold(self.branch))
+			if self.department:
+				error_msg += "<br>" + _("Department: {0}").format(frappe.bold(self.department))
+			if self.designation:
+				error_msg += "<br>" + _("Designation: {0}").format(frappe.bold(self.designation))
+			if self.start_date:
+				error_msg += "<br>" + _("Start date: {0}").format(frappe.bold(self.start_date))
+			if self.end_date:
+				error_msg += "<br>" + _("End date: {0}").format(frappe.bold(self.end_date))
+			frappe.throw(error_msg, title=_("No employees found"))
+
+		frequency = get_current_block_period(self)
+		employee_frequency = get_employee_frequency_map()
+
+		for d in employees:
+			if d.employee in employee_frequency:
+				if str(frequency[employee_frequency[d.employee]].end_date) != str(self.end_date):
+					continue
+			self.append("employees", d)
+
+		self.number_of_employees = len(self.employees)
+		return self.get_employees_with_unmarked_attendance()
+
 
 	@frappe.whitelist()
 	def create_salary_slips(self):
@@ -790,9 +826,10 @@ class CustomPayrollEntry(PayrollEntry):
 				row_account["business_unit"] = acc[1]
 				row_account["employee_type"] = acc[2]
 
-				accounts.append(
-					row_account
-				)
+				if row_account["debit_in_account_currency"]:
+					accounts.append(
+						row_account
+					)
 
 
 		else:
@@ -805,7 +842,7 @@ class CustomPayrollEntry(PayrollEntry):
 					else:
 						if employee_details.get("is_bank_entry_created"):
 							continue
-						je_payment_amount = employee_details.get("earnings") - (
+						je_payment_amount = (employee_details.get("earnings") or 0) - (
 							employee_details.get("deductions") or 0
 						)
 
@@ -820,25 +857,26 @@ class CustomPayrollEntry(PayrollEntry):
 
 					for cost_center, percentage in cost_centers.items():
 						amount_against_cost_center = flt(amount) * percentage / 100
-						accounts.append(
-							self.update_accounting_dimensions(
-								{
-									"account": payroll_payable_account,
-									"debit_in_account_currency": flt(amount_against_cost_center, precision),
-									"exchange_rate": flt(exchange_rate),
-									"reference_type": self.doctype,
-									"reference_name": self.name,
-									"party_type": "Employee",
-									"party": employee,
-									"custom_party_name": frappe.db.get_value("Employee", employee, "employee_name"),
-									"cost_center": cost_center,
-									"custom_is_payroll_entry": 0 if self.get("jv_for_company_contribution") else 1,
-									"custom_is_company_contribution": 1 if self.get("jv_for_company_contribution") else 0
-									# "business_unit": business_unit,
-								},
-								accounting_dimensions,
+						if amount_against_cost_center:
+							accounts.append(
+								self.update_accounting_dimensions(
+									{
+										"account": payroll_payable_account,
+										"debit_in_account_currency": flt(amount_against_cost_center, precision),
+										"exchange_rate": flt(exchange_rate),
+										"reference_type": self.doctype,
+										"reference_name": self.name,
+										"party_type": "Employee",
+										"party": employee,
+										"custom_party_name": frappe.db.get_value("Employee", employee, "employee_name"),
+										"cost_center": cost_center,
+										"custom_is_payroll_entry": 0 if self.get("jv_for_company_contribution") else 1,
+										"custom_is_company_contribution": 1 if self.get("jv_for_company_contribution") else 0
+										# "business_unit": business_unit,
+									},
+									accounting_dimensions,
+								)
 							)
-						)
 			else:
 				exchange_rate, amount = self.get_amount_and_exchange_rate_for_journal_entry(
 					payroll_payable_account, je_payment_amount, company_currency, currencies
@@ -873,8 +911,9 @@ class CustomPayrollEntry(PayrollEntry):
 		journal_entry.posting_date = posting_date
 		journal_entry.multi_currency = multi_currency
 
-		journal_entry.set("accounts", accounts)
-		journal_entry.save(ignore_permissions=True)
+		if accounts:
+			journal_entry.set("accounts", accounts)
+			journal_entry.save(ignore_permissions=True)
 
 
 
