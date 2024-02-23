@@ -5,18 +5,18 @@ from datetime import date, datetime, timedelta
 import frappe
 from frappe import _
 from frappe.utils import (add_days, cint, date_diff, flt, get_link_to_form,
-                          getdate)
+						  getdate)
 from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import \
-    get_benefit_component_amount
+	get_benefit_component_amount
 from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import \
-    get_benefit_claim_amount
+	get_benefit_claim_amount
 from hrms.payroll.doctype.payroll_period.payroll_period import (
-    get_payroll_period, get_period_factor)
+	get_payroll_period, get_period_factor)
 from hrms.payroll.doctype.salary_slip.salary_slip import (
-    SalarySlip, calculate_tax_by_tax_slab, get_salary_component_data, rounded)
+	SalarySlip, calculate_tax_by_tax_slab, get_salary_component_data, rounded)
 from kartoza.custom_py.payroll_entry import (get_current_block_period,
-                                             get_employee_frequency_map,
-                                             is_payroll_processed)
+											 get_employee_frequency_map,
+											 is_payroll_processed)
 
 
 class CustomSalarySlip(SalarySlip):
@@ -88,13 +88,23 @@ class CustomSalarySlip(SalarySlip):
 			medical_aid = get_medical_aid(self, dependant)
 		if dob:
 			tax_rebate = get_tax_rebate(self, dob)
+		current_eti_amount = get_eti_deduction(self)
 
+		amount_before_eti_deduction=0
+		amount_after_eti_deduction=0
 		for i in self.deductions:
 			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component") and frappe.db.get_value("Salary Component", i.salary_component, "variable_based_on_taxable_salary"):
 				self.tax_value = self.deductions[i.idx-1].amount
 				self.deductions[i.idx-1].amount -= (medical_aid + tax_rebate)
+				if self.deductions[i.idx-1].amount < 0:
+					self.deductions[i.idx-1].amount = 0
+				amount_before_eti_deduction+=self.deductions[i.idx-1].amount
+				self.deductions[i.idx-1].amount -= current_eti_amount
+				amount_after_eti_deduction = current_eti_amount - amount_before_eti_deduction
 				self.tax_rebate = tax_rebate
 				self.medical_aid = medical_aid
+				self.custom_monthly_eti = current_eti_amount
+				self.custom_carry_forwarding_eti_amount = amount_after_eti_deduction if amount_after_eti_deduction > 0 else 0
 				if self.deductions[i.idx-1].amount < 0:
 					self.deductions[i.idx-1].amount = 0
 
@@ -332,6 +342,19 @@ class CustomSalarySlip(SalarySlip):
 
 		return amount, additional_amount
 
+	def on_submit(self):
+		super().on_submit()
+
+		if self.custom_monthly_eti:
+			eti_log=frappe.new_doc("Employee ETI Log")
+			eti_log.employee=self.employee
+			eti_log.date=self.posting_date
+			eti_log.eti_amount=self.custom_monthly_eti
+			eti_log.carry_forwarding_eti_amount=self.custom_carry_forwarding_eti_amount
+			eti_log.against_salary_slip=self.name
+			eti_log.insert()
+			eti_log.submit()
+
 def get_retirement_annuity(self):
 	ra = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, order_by='effective_from')
 	res = frappe._dict({})
@@ -357,6 +380,68 @@ def get_medical_aid(self, dependant):
 			medical_aid = (medical_aid + (dependant * doc.additional_dependant)) or 0
 	return medical_aid
 
+def get_eti_deduction(self):
+	current_eti_amount=0
+	employee_details = frappe.db.get_value("Employee",{
+							"name" : self.employee
+						},['date_of_joining','date_of_birth'],as_dict=True) or {}
+	age = calculate_age(employee_details.get("date_of_birth"))
+	eti_details=frappe.db.get_value("ETI Slab",{"start_date" : ['<=',(self.posting_date)],"docstatus":1},["minimum_age","maximum_age","name"],as_dict=True)
+
+	taxable_eti_amount=0
+	if eti_details and eti_details.get('minimum_age') <= age and eti_details.get('maximum_age') >= age:
+		prev_eti = frappe.get_all("Employee ETI Log",{"employee": self.employee},pluck="name")
+		prev_eti_count = len(prev_eti)
+		if prev_eti_count < 24:
+			eligible_components={}
+			eti_eligible_components = frappe.get_all("Salary Component",{"custom_allow_for_eti": 1},["name","taxable_earning_reduce_percentage","reduce_on_taxable_earning"])
+			for eti_component in eti_eligible_components:
+				eligible_components[eti_component.get('name')] = {
+												"taxable_earning_reduce_percentage":eti_component.get('taxable_earning_reduce_percentage'),
+												"reduce_on_taxable_earning" : eti_component.get('reduce_on_taxable_earning')
+											}
+			for earning in self.earnings:
+				if earning.salary_component in eligible_components.keys():
+					print(eligible_components)
+					if float(eligible_components.get(earning.salary_component,{}).get('taxable_earning_reduce_percentage')) > 0 and eligible_components.get(earning.salary_component,{}).get('reduce_on_taxable_earning'):
+						taxable_eti_amount += (float(eligible_components.get(earning.salary_component,{}).get('taxable_earning_reduce_percentage'))/100)*earning.amount
+					else:
+						taxable_eti_amount += earning.amount
+			formula_field = "first_qualifying_12_months" if prev_eti_count <= 11 else "second_qualifying_12_months"
+			if taxable_eti_amount:
+				formula=frappe.db.get_value("ETI Slab Details",{
+							"parent" : eti_details.get('name'),
+							"from_amount" : ["<=",taxable_eti_amount],
+							"to_amount" : [">=",taxable_eti_amount]
+						},formula_field)
+
+				if formula:
+					self.data, self.default_data = self.get_data_for_eval()
+					self.data.montly_remuneration = taxable_eti_amount
+					current_eti_amount = frappe.safe_eval(formula,self.data) or 0
+					prev_eti_balance_details = frappe.db.sql("""
+											SELECT carry_forwarding_eti_amount
+												FROM `tabEmployee ETI Log`
+											WHERE
+												employee = '{0}' AND
+												docstatus = 1 AND
+												date <= '{1}'
+											ORDER BY
+												date DESC
+											LIMIT 1
+										""".format(self.employee, self.posting_date),as_dict=True)
+					if prev_eti_balance_details and prev_eti_balance_details[0].get('carry_forwarding_eti_amount'):
+						current_eti_amount+=prev_eti_balance_details[0].get('carry_forwarding_eti_amount')
+	return current_eti_amount
+
+def calculate_age(date_of_birth):
+	dob = datetime.strptime(str(date_of_birth), '%Y-%m-%d')
+	current_date = datetime.now()
+	age = current_date.year - dob.year
+	# Adjust age if the birthday hasn't occurred yet this year
+	if current_date.month < dob.month or (current_date.month == dob.month and current_date.day < dob.day):
+		age -= 1
+	return age
 
 def get_total_days(year_start,year_end):
 	year_start = year_start
