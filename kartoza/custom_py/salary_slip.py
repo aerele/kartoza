@@ -402,7 +402,7 @@ def get_eti_deduction(self):
 											}
 			for earning in self.earnings:
 				if earning.salary_component in eligible_components.keys():
-					print(eligible_components)
+
 					if float(eligible_components.get(earning.salary_component,{}).get('taxable_earning_reduce_percentage')) > 0 and eligible_components.get(earning.salary_component,{}).get('reduce_on_taxable_earning'):
 						taxable_eti_amount += (float(eligible_components.get(earning.salary_component,{}).get('taxable_earning_reduce_percentage'))/100)*earning.amount
 					else:
@@ -417,8 +417,8 @@ def get_eti_deduction(self):
 
 				if formula:
 					self.data, self.default_data = self.get_data_for_eval()
-					self.data.montly_remuneration = taxable_eti_amount
-					current_eti_amount = frappe.safe_eval(formula,self.data) or 0
+					self.data.monthly_remuneration = taxable_eti_amount
+					current_eti_amount = frappe.safe_eval(formula, self.data) or 0
 					prev_eti_balance_details = frappe.db.sql("""
 											SELECT carry_forwarding_eti_amount
 												FROM `tabEmployee ETI Log`
