@@ -9,6 +9,7 @@
  "field_order": [
   "employee",
   "column_break_2",
+  "naming_series",
   "employee_name",
   "section_break_4",
   "medical_tax_benefit_section",
@@ -22,7 +23,6 @@
   "column_break_10",
   "to",
   "disable",
-  "naming_series",
   "maximum_",
   "maximum_amount"
  ],
@@ -36,7 +36,7 @@
    "fieldtype": "Percent",
    "in_list_view": 1,
    "label": "Maximum %",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.annuity_amount>0"
   },
   {
    "description": "/ Year",
@@ -44,7 +44,7 @@
    "fieldtype": "Currency",
    "in_list_view": 1,
    "label": "Maximum Amount",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.annuity_amount>0"
   },
   {
    "default": "0",
@@ -56,8 +56,7 @@
    "description": "/ Month",
    "fieldname": "annuity_amount",
    "fieldtype": "Currency",
-   "label": "Annuity Amount",
-   "reqd": 1
+   "label": "Annuity Amount"
   },
   {
    "fieldname": "employee",
@@ -78,7 +77,7 @@
    "fieldtype": "Date",
    "in_list_view": 1,
    "label": "Effective From",
-   "reqd": 1
+   "mandatory_depends_on": "eval:doc.annuity_amount>0"
   },
   {
    "fieldname": "to",
@@ -132,10 +131,11 @@
  ],
  "index_web_pages_for_search": 1,
  "links": [],
- "modified": "2022-11-19 20:31:01.164846",
+ "modified": "2024-02-18 21:28:53.061440",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Employee Private Benefit",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -152,5 +152,6 @@
   }
  ],
  "sort_field": "modified",
- "sort_order": "DESC"
+ "sort_order": "DESC",
+ "states": []
 }
