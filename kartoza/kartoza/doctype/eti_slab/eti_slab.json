@@ -1,13 +1,14 @@
 {
  "actions": [],
  "allow_rename": 1,
- "autoname": "field:title",
+ "autoname": "naming_series:",
  "creation": "2024-02-21 12:41:35.172006",
  "default_view": "List",
  "doctype": "DocType",
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "naming_series",
   "title",
   "start_date",
   "column_break_iadgo",
@@ -37,7 +38,8 @@
    "fieldname": "eti_slab_details",
    "fieldtype": "Table",
    "label": "ETI Slab Details",
-   "options": "ETI Slab Details"
+   "options": "ETI Slab Details",
+   "reqd": 1
   },
   {
    "fieldname": "amended_from",
@@ -69,16 +71,22 @@
   {
    "fieldname": "section_break_fyogz",
    "fieldtype": "Section Break"
+  },
+  {
+   "fieldname": "naming_series",
+   "fieldtype": "Select",
+   "label": "Naming Series",
+   "options": "ETI-.YYYY.-.####."
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-02-22 07:18:47.424872",
+ "modified": "2024-03-06 18:49:55.078001",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "ETI Slab",
- "naming_rule": "By fieldname",
+ "naming_rule": "By \"Naming Series\" field",
  "owner": "Administrator",
  "permissions": [
   {
@@ -96,5 +104,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "title_field": "title"
 }
