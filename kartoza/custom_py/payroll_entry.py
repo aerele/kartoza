@@ -113,10 +113,15 @@ class CustomPayrollEntry(PayrollEntry):
 		frequency = get_current_block_period(self)
 		employee_frequency = get_employee_frequency_map()
 
+		pay_at = frappe.db.get_value("Employee Payroll Frequency", "Employee Payroll Frequency", "pay_at")
+
 		for d in employees:
 			if d.employee in employee_frequency:
-				if str(frequency[employee_frequency[d.employee]].end_date) != str(self.end_date):
+				if pay_at == "Beginning of the period" and str(frequency[employee_frequency[d.employee]].start_date) != str(self.start_date):
 					continue
+				if pay_at == "End of the period" and str(frequency[employee_frequency[d.employee]].end_date) != str(self.end_date):
+					continue
+
 			self.append("employees", d)
 
 		self.number_of_employees = len(self.employees)

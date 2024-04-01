@@ -7,6 +7,7 @@
  "editable_grid": 1,
  "engine": "InnoDB",
  "field_order": [
+  "pay_at",
   "frequency_detail"
  ],
  "fields": [
@@ -16,12 +17,19 @@
    "label": "Frequency Detail",
    "options": "Employee Frequency Detail",
    "reqd": 1
+  },
+  {
+   "default": "End of the period",
+   "fieldname": "pay_at",
+   "fieldtype": "Select",
+   "label": "Pay At",
+   "options": "Beginning of the period\nEnd of the period"
   }
  ],
  "index_web_pages_for_search": 1,
  "issingle": 1,
  "links": [],
- "modified": "2023-09-08 20:18:48.266830",
+ "modified": "2024-04-01 19:42:08.619747",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Employee Payroll Frequency",
@@ -40,5 +48,6 @@
  ],
  "sort_field": "modified",
  "sort_order": "DESC",
- "states": []
+ "states": [],
+ "track_changes": 1
 }
