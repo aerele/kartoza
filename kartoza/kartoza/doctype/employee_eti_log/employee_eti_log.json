@@ -61,15 +61,14 @@
   },
   {
    "fieldname": "against_salary_slip",
-   "fieldtype": "Link",
-   "label": "Against Salary Slip",
-   "options": "Salary Slip"
+   "fieldtype": "Data",
+   "label": "Against Salary Slip"
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-02-22 15:34:45.710373",
+ "modified": "2024-04-08 17:48:16.786677",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "Employee ETI Log",

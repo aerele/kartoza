@@ -355,6 +355,18 @@ class CustomSalarySlip(SalarySlip):
 			eti_log.insert()
 			eti_log.submit()
 
+	def on_cancel(self):
+		eti_logs = frappe.db.sql_list("""select name from `tabEmployee ETI Log` where against_salary_slip=%s """, (self.name))
+		for log in eti_logs:
+			doc = frappe.get_doc("Employee ETI Log", log)
+			doc.cancel()
+
+
+		frappe.delete_doc(
+			"Employee ETI Log",
+			eti_logs,
+		)
+
 def get_retirement_annuity(self):
 	ra = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, order_by='effective_from')
 	res = frappe._dict({})
