@@ -107,6 +107,7 @@ class CustomSalarySlip(SalarySlip):
 				self.custom_carry_forwarding_eti_amount = amount_after_eti_deduction if amount_after_eti_deduction > 0 else 0
 				if self.deductions[i.idx-1].amount < 0:
 					self.deductions[i.idx-1].amount = 0
+				self.current_structured_tax_amount = self.deductions[i.idx-1].amount
 
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
@@ -128,10 +129,10 @@ class CustomSalarySlip(SalarySlip):
 		self.total_cost = self.gross_pay + self.total_company_contribution
 
 
-		super().set_loan_repayment()
-		super().set_precision_for_component_amounts()
-		super().set_net_pay()
-		super().compute_income_tax_breakup()
+		self.set_loan_repayment()
+		self.set_precision_for_component_amounts()
+		self.set_net_pay()
+		self.compute_income_tax_breakup()
 
 
 	def add_employee_benefits(self):
