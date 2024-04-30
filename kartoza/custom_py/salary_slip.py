@@ -12,6 +12,7 @@ from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import \
 	get_benefit_claim_amount
 from hrms.payroll.doctype.payroll_period.payroll_period import (
 	get_payroll_period, get_period_factor)
+from frappe.query_builder.functions import Count, Sum
 from hrms.payroll.doctype.salary_slip.salary_slip import (
 	SalarySlip, calculate_tax_by_tax_slab, get_salary_component_data, rounded)
 from kartoza.custom_py.payroll_entry import (get_current_block_period,
@@ -65,6 +66,23 @@ class CustomSalarySlip(SalarySlip):
 			tax_row = get_salary_component_data(d)
 			self.update_component_row(tax_row, tax_amount, "deductions")
 
+	def get_tax_rebate(self):
+		tax_rebate = 0
+		dob = frappe.db.get_value("Employee", self.employee, "date_of_birth")
+		if dob:
+			tax_rebate = get_tax_rebate(self, dob)
+
+		return tax_rebate
+
+	def get_medical_aid(self):
+		medical_aid = 0
+		dependant = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, 'medical_aid_dependant')
+		if dependant:
+			medical_aid = get_medical_aid(self, dependant)
+		return medical_aid
+
+
+
 	def calculate_net_pay(self):
 		# self.payroll_period = frappe.db.get_value('Payroll Period', {"start_date": ("<=", self.start_date),
 		# "end_date": (">=", self.end_date), "company": self.company })
@@ -73,41 +91,24 @@ class CustomSalarySlip(SalarySlip):
 
 		super().calculate_net_pay()
 
-		if self.payroll_period:
-			self.payroll_period_ = self.payroll_period.name
-			self.remaining_sub_periods = get_remaining_sub_periods(
-				self.employee, self.start_date, self.end_date, self.payroll_frequency, self.payroll_period
-			)
+		# if self.payroll_period:
+		# 	self.payroll_period_ = self.payroll_period.name
+		# 	self.remaining_sub_periods = get_remaining_sub_periods(
+		# 		self.employee, self.start_date, self.end_date, self.payroll_frequency, self.payroll_period
+		# 	)
+		current_eti_amount = get_eti_deduction(self) or 0
 
-		# dependant = frappe.db.get_value("Employee", self.employee, "medical_aid_dependant")
-		dependant = frappe.db.get_value("Employee Private Benefit", {"effective_from":["<=", self.start_date],"disable":0, "employee":self.employee}, 'medical_aid_dependant')
-		dob = frappe.db.get_value("Employee", self.employee, "date_of_birth")
-		medical_aid = 0
-		tax_rebate = 0
-		if dependant:
-			medical_aid = get_medical_aid(self, dependant)
-		if dob:
-			tax_rebate = get_tax_rebate(self, dob)
-		current_eti_amount = get_eti_deduction(self)
 
 		amount_before_eti_deduction=0
 		amount_after_eti_deduction=0
-		for i in self.deductions:
-			if frappe.db.get_value("Salary Component", i.salary_component, "is_income_tax_component") and frappe.db.get_value("Salary Component", i.salary_component, "variable_based_on_taxable_salary"):
-				self.tax_value = self.deductions[i.idx-1].amount
-				self.deductions[i.idx-1].amount -= (medical_aid + tax_rebate)
-				if self.deductions[i.idx-1].amount < 0:
-					self.deductions[i.idx-1].amount = 0
-				amount_before_eti_deduction+=self.deductions[i.idx-1].amount
-				self.deductions[i.idx-1].amount -= current_eti_amount
-				amount_after_eti_deduction = current_eti_amount - amount_before_eti_deduction
-				self.tax_rebate = tax_rebate
-				self.medical_aid = medical_aid
-				self.custom_monthly_eti = current_eti_amount
-				self.custom_carry_forwarding_eti_amount = amount_after_eti_deduction if amount_after_eti_deduction > 0 else 0
-				if self.deductions[i.idx-1].amount < 0:
-					self.deductions[i.idx-1].amount = 0
-				self.current_structured_tax_amount = self.deductions[i.idx-1].amount
+
+		tax_amount = self.tax_value or 0
+		amount_before_eti_deduction = tax_amount
+		tax_amount -= current_eti_amount
+		amount_after_eti_deduction = current_eti_amount - amount_before_eti_deduction
+
+		self.custom_monthly_eti = current_eti_amount
+		self.custom_carry_forwarding_eti_amount = amount_after_eti_deduction if amount_after_eti_deduction > 0 else 0
 
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
@@ -129,11 +130,66 @@ class CustomSalarySlip(SalarySlip):
 		self.total_cost = self.gross_pay + self.total_company_contribution
 
 
-		self.set_loan_repayment()
-		self.set_precision_for_component_amounts()
-		self.set_net_pay()
-		self.compute_income_tax_breakup()
+		# self.set_loan_repayment()
+		# self.set_precision_for_component_amounts()
+		# self.set_net_pay()
+		# self.compute_income_tax_breakup()
 
+
+	def calculate_variable_tax(self, tax_component):
+		self.previous_total_paid_taxes = self.get_tax_paid_in_period(
+			self.payroll_period.start_date, self.start_date, tax_component
+		)
+
+		tax_rebate = self.get_tax_rebate()
+		medical_aid = self.get_medical_aid()
+		self.tax_rebate = tax_rebate
+		self.medical_aid = medical_aid
+		total_months = frappe.utils.month_diff(self.payroll_period.end_date, self.payroll_period.start_date)
+
+
+		# Structured tax amount
+		eval_locals, default_data = self.get_data_for_eval()
+		self.total_structured_tax_amount = calculate_tax_by_tax_slab(
+			self.total_taxable_earnings_without_full_tax_addl_components,
+			self.tax_slab,
+			self.whitelisted_globals,
+			eval_locals,
+		)
+
+		self.current_structured_tax_amount = (
+			self.total_structured_tax_amount - self.previous_total_paid_taxes
+		) / self.remaining_sub_periods
+		self.tax_value = self.current_structured_tax_amount
+
+		# Total taxable earnings with additional earnings with full tax
+		self.full_tax_on_additional_earnings = 0.0
+		if self.current_additional_earnings_with_full_tax:
+			self.total_tax_amount = calculate_tax_by_tax_slab(
+				self.total_taxable_earnings, self.tax_slab, self.whitelisted_globals, eval_locals
+			)
+			self.full_tax_on_additional_earnings = self.total_tax_amount - self.total_structured_tax_amount
+
+		self.total_structured_tax_amount = self.total_structured_tax_amount - (medical_aid * total_months + tax_rebate * total_months)
+
+		self.current_structured_tax_amount = (
+			self.total_structured_tax_amount - self.previous_total_paid_taxes
+		) / self.remaining_sub_periods
+
+		current_tax_amount = self.current_structured_tax_amount + self.full_tax_on_additional_earnings
+		if flt(current_tax_amount) < 0:
+			current_tax_amount = 0
+
+		self._component_based_variable_tax[tax_component].update(
+			{
+				"previous_total_paid_taxes": self.previous_total_paid_taxes,
+				"total_structured_tax_amount": self.total_structured_tax_amount,
+				"current_structured_tax_amount": self.current_structured_tax_amount,
+				"full_tax_on_additional_earnings": self.full_tax_on_additional_earnings,
+				"current_tax_amount": current_tax_amount,
+			}
+		)
+		return current_tax_amount
 
 	def add_employee_benefits(self):
 		for struct_row in self._salary_structure_doc.get("earnings"):
@@ -150,14 +206,6 @@ class CustomSalarySlip(SalarySlip):
 
 	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
 		taxable_income = super().get_taxable_earnings(allow_tax_exemption, based_on_payment_days)
-		ra = get_retirement_annuity(self)
-		if ra:
-			ra_percent = ra.ra_amount / taxable_income.taxable_earnings * 100
-			if ra_percent > ra.limit_percent:
-				ra_percent = ra.limit_percent
-			ra_amount = ra_percent * taxable_income.taxable_earnings / 100
-			self.retirement_annuity = ra_amount
-			taxable_income.taxable_earnings -= ra_amount
 		for i in self.earnings:
 			tax = 0
 			reduce, percent = frappe.db.get_value("Salary Component", i.salary_component, ["reduce_on_taxable_earning", "taxable_earning_reduce_percentage"])
@@ -167,7 +215,17 @@ class CustomSalarySlip(SalarySlip):
 				taxable_income.flexi_benefits -= tax
 			else:
 				taxable_income.taxable_earnings -= tax
-		taxable_income.taxable_earnings += taxable_income.flexi_benefits
+
+		ra = get_retirement_annuity(self)
+		if ra:
+			ra_percent = ra.ra_amount / taxable_income.taxable_earnings * 100
+			if ra_percent > ra.limit_percent:
+				ra_percent = ra.limit_percent
+			ra_amount = ra_percent * taxable_income.taxable_earnings / 100
+			self.retirement_annuity = ra_amount
+			taxable_income.taxable_earnings -= ra_amount
+
+		# taxable_income.taxable_earnings += taxable_income.flexi_benefits
 		taxable_income.flexi_benefits = 0
 		self.taxable_value = taxable_income.taxable_earnings
 		return taxable_income
@@ -266,6 +324,31 @@ class CustomSalarySlip(SalarySlip):
 		taxable_earnings = self.get_salary_slip_details(
 			start_date, end_date, parentfield="earnings", is_tax_applicable=1
 		)
+
+		ss = frappe.qb.DocType("Salary Slip")
+		sd = frappe.qb.DocType("Salary Detail")
+		sc = frappe.qb.DocType("Salary Component")
+
+		partial_taxable_earnings = 0
+		query = (
+			frappe.qb.from_(ss)
+			.join(sd)
+			.on(sd.parent == ss.name)
+			.join(sc)
+			.on(sd.salary_component == sc.name)
+			.select(Sum(sd.amount - (sd.amount * sc.taxable_earning_reduce_percentage / 100)))
+			.where(sd.parentfield == 'earnings')
+			.where(sd.is_flexible_benefit == 0)
+			.where(ss.docstatus == 1)
+			.where(ss.employee == self.employee)
+			.where(sc.reduce_on_taxable_earning == 1)
+			.where(ss.start_date.between(start_date, end_date))
+			.where(ss.end_date.between(start_date, end_date))
+		).run()
+		if query:
+			partial_taxable_earnings = query[0][0] or 0
+
+		taxable_earnings -= partial_taxable_earnings
 
 		if allow_tax_exemption:
 			exempted_amount = self.get_salary_slip_details(
