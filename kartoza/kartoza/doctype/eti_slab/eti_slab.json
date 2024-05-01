@@ -14,6 +14,7 @@
   "column_break_iadgo",
   "minimum_age",
   "maximum_age",
+  "hours_in_a_month",
   "section_break_fyogz",
   "eti_slab_details",
   "amended_from"
@@ -77,12 +78,18 @@
    "fieldtype": "Select",
    "label": "Naming Series",
    "options": "ETI-.YYYY.-.####."
+  },
+  {
+   "fieldname": "hours_in_a_month",
+   "fieldtype": "Float",
+   "label": "Hours in a Month",
+   "reqd": 1
   }
  ],
  "index_web_pages_for_search": 1,
  "is_submittable": 1,
  "links": [],
- "modified": "2024-03-06 18:49:55.078001",
+ "modified": "2024-05-01 16:59:59.076193",
  "modified_by": "Administrator",
  "module": "Kartoza",
  "name": "ETI Slab",

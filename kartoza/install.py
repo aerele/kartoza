@@ -445,4 +445,8 @@ def make_custom_fields():
 		custom_fields["Employee"].append(dict(fieldname='payroll_payable_account', label='Payroll Payable Bank Account',
 						fieldtype='Link', options="Bank Account", insert_after='payroll_cost_center'))
 
+	if not frappe.get_meta("Employee").get_field("hours_per_month"):
+		custom_fields["Employee"].append(dict(fieldname='hours_per_month', label='Hours Per Month',
+						fieldtype='Float', insert_after='payroll_payable_account'))
+
 	create_custom_fields(custom_fields)

@@ -100,15 +100,15 @@ class CustomSalarySlip(SalarySlip):
 
 
 		amount_before_eti_deduction=0
-		amount_after_eti_deduction=0
+		# amount_after_eti_deduction=0
 
 		tax_amount = self.tax_value or 0
 		amount_before_eti_deduction = tax_amount
 		tax_amount -= current_eti_amount
-		amount_after_eti_deduction = current_eti_amount - amount_before_eti_deduction
+		# amount_after_eti_deduction = current_eti_amount - amount_before_eti_deduction
 
 		self.custom_monthly_eti = current_eti_amount
-		self.custom_carry_forwarding_eti_amount = amount_after_eti_deduction if amount_after_eti_deduction > 0 else 0
+		# self.custom_carry_forwarding_eti_amount = amount_after_eti_deduction if amount_after_eti_deduction > 0 else 0
 
 		salary_structure_doc = frappe.get_doc('Salary Structure', self.salary_structure)
 
@@ -480,9 +480,16 @@ def get_eti_deduction(self):
 	current_eti_amount=0
 	employee_details = frappe.db.get_value("Employee",{
 							"name" : self.employee
-						},['date_of_joining','date_of_birth'],as_dict=True) or {}
+						},['date_of_joining','date_of_birth', 'hours_per_month'],as_dict=True) or {}
+
+	if not employee_details.hours_per_month:
+		frappe.throw("Set <b>Hours Per Month</b> for the Employee: {0}".format(self.employee))
+
 	age = calculate_age(employee_details.get("date_of_birth"))
-	eti_details=frappe.db.get_value("ETI Slab",{"start_date" : ['<=',(self.posting_date)],"docstatus":1},["minimum_age","maximum_age","name"],as_dict=True)
+	eti_details=frappe.db.get_value("ETI Slab",{"start_date" : ['<=',(self.posting_date)],"docstatus":1},["minimum_age","maximum_age","name", "hours_in_a_month"],as_dict=True)
+
+	if eti_details.hours_in_a_month < employee_details.hours_per_month:
+		employee_details.hours_per_month = eti_details.hours_in_a_month
 
 	taxable_eti_amount=0
 	if eti_details and eti_details.get('minimum_age') <= age and eti_details.get('maximum_age') >= age:
@@ -515,6 +522,7 @@ def get_eti_deduction(self):
 					self.data, self.default_data = self.get_data_for_eval()
 					self.data.monthly_remuneration = taxable_eti_amount
 					current_eti_amount = frappe.safe_eval(formula, self.data) or 0
+					current_eti_amount = current_eti_amount / eti_details.hours_in_a_month * employee_details.hours_per_month
 					prev_eti_balance_details = frappe.db.sql("""
 											SELECT carry_forwarding_eti_amount
 												FROM `tabEmployee ETI Log`
