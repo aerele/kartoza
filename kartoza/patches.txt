@@ -2,3 +2,6 @@
 
 [post_model_sync]
 kartoza.patches.update_payroll_entry #1
+execute:frappe.db.set_value("Salary Component", "4141 UIF Employee and Employer Contributions", "formula", "(BS+3605_1+3605+bonus_3655)/100 if (BS+3605_1+3605+bonus_3655)<=17712 else 177.12")
+execute:frappe.db.set_value("Company Contribution", {"parenttype": "Salary Structure", "salary_component": "4141 UIF Employee and Employer Contributions", "parentfield": "company_contribution"}, "formula", "(BS+3605_1+3605+bonus_3655)/100 if (BS+3605_1+3605+bonus_3655)<=17712 else 177.12")
+execute:frappe.db.set_value("Salary Detail", {"parenttype": "Salary Structure", "salary_component": "4141 UIF Employee and Employer Contributions", "parentfield": "deductions"}, "formula", "(BS+3605_1+3605+bonus_3655)/100 if (BS+3605_1+3605+bonus_3655)<=17712 else 177.12")
