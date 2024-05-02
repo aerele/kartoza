@@ -482,17 +482,14 @@ def get_eti_deduction(self):
 							"name" : self.employee
 						},['date_of_joining','date_of_birth', 'hours_per_month'],as_dict=True) or {}
 
-	if not employee_details.hours_per_month:
-		frappe.throw("Set <b>Hours Per Month</b> for the Employee: {0}".format(self.employee))
 
 	age = calculate_age(employee_details.get("date_of_birth"))
 	eti_details=frappe.db.get_value("ETI Slab",{"start_date" : ['<=',(self.posting_date)],"docstatus":1},["minimum_age","maximum_age","name", "hours_in_a_month"],as_dict=True)
 
-	if eti_details.hours_in_a_month < employee_details.hours_per_month:
-		employee_details.hours_per_month = eti_details.hours_in_a_month
 
 	taxable_eti_amount=0
 	if eti_details and eti_details.get('minimum_age') <= age and eti_details.get('maximum_age') >= age:
+
 		prev_eti = frappe.get_all("Employee ETI Log",{"employee": self.employee},pluck="name")
 		prev_eti_count = len(prev_eti)
 		if prev_eti_count < 24:
@@ -512,6 +509,13 @@ def get_eti_deduction(self):
 						taxable_eti_amount += earning.amount
 			formula_field = "first_qualifying_12_months" if prev_eti_count <= 11 else "second_qualifying_12_months"
 			if taxable_eti_amount:
+
+				if not employee_details.hours_per_month:
+					frappe.throw("Set <b>Hours Per Month</b> for the Employee: {0}".format(self.employee))
+
+				if eti_details.hours_in_a_month < employee_details.hours_per_month:
+					employee_details.hours_per_month = eti_details.hours_in_a_month
+
 				formula=frappe.db.get_value("ETI Slab Details",{
 							"parent" : eti_details.get('name'),
 							"from_amount" : ["<=",taxable_eti_amount],
