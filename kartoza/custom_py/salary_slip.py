@@ -510,12 +510,6 @@ def get_eti_deduction(self):
 			formula_field = "first_qualifying_12_months" if prev_eti_count <= 11 else "second_qualifying_12_months"
 			if taxable_eti_amount:
 
-				if not employee_details.hours_per_month:
-					frappe.throw("Set <b>Hours Per Month</b> for the Employee: {0}".format(self.employee))
-
-				if eti_details.hours_in_a_month < employee_details.hours_per_month:
-					employee_details.hours_per_month = eti_details.hours_in_a_month
-
 				formula=frappe.db.get_value("ETI Slab Details",{
 							"parent" : eti_details.get('name'),
 							"from_amount" : ["<=",taxable_eti_amount],
@@ -523,6 +517,13 @@ def get_eti_deduction(self):
 						},formula_field)
 
 				if formula:
+
+					if not employee_details.hours_per_month:
+						frappe.throw("Set <b>Hours Per Month</b> for the Employee: {0}".format(self.employee))
+
+					if eti_details.hours_in_a_month < employee_details.hours_per_month:
+						employee_details.hours_per_month = eti_details.hours_in_a_month
+
 					self.data, self.default_data = self.get_data_for_eval()
 					self.data.monthly_remuneration = taxable_eti_amount
 					current_eti_amount = frappe.safe_eval(formula, self.data) or 0
