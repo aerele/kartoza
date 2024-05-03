@@ -227,7 +227,8 @@ class CustomSalarySlip(SalarySlip):
 
 		# taxable_income.taxable_earnings += taxable_income.flexi_benefits
 		taxable_income.flexi_benefits = 0
-		self.taxable_value = taxable_income.taxable_earnings
+		if based_on_payment_days:
+			self.taxable_value = taxable_income.taxable_earnings + taxable_income.additional_income
 		return taxable_income
 
 	def get_working_days_details(
