@@ -434,12 +434,17 @@ def before_install():
 def make_custom_fields():
 	custom_fields = {
 		'HR Settings': [],
+		'Payroll Settings': [],
 		"Employee":[]
 	}
 
 	if not frappe.get_meta("HR Settings").get_field("amount_per_kilometer"):
 		custom_fields["HR Settings"].append(dict(fieldname='amount_per_kilometer', label='Amount Per Kilometer',
 						fieldtype='Currency', insert_after='emp_created_by'))
+
+	if not frappe.get_meta("Payroll Settings").get_field("calculate_annual_taxable_amount_based_on"):
+		custom_fields["Payroll Settings"].append(dict(fieldname='calculate_annual_taxable_amount_based_on', label='Calculate Annual Taxable Amount Based On',
+						fieldtype='Select', options="\nJoining and Relieving Date\nPayroll Period", default="Payroll Period", insert_after='daily_wages_fraction_for_half_day'))
 
 	if not frappe.get_meta("Employee").get_field("payroll_payable_account"):
 		custom_fields["Employee"].append(dict(fieldname='payroll_payable_account', label='Payroll Payable Bank Account',

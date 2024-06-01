@@ -4,7 +4,7 @@ from datetime import date, datetime, timedelta
 
 import frappe
 from frappe import _
-from frappe.utils import (add_days, cint, date_diff, flt, get_link_to_form,
+from frappe.utils import (add_days, cint, date_diff, flt, get_link_to_form, month_diff,
 						  getdate)
 from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import \
 	get_benefit_component_amount
@@ -89,13 +89,30 @@ class CustomSalarySlip(SalarySlip):
 
 		# self.payroll_period = get_payroll_period(self.start_date, self.end_date, self.company)
 
-		super().calculate_net_pay()
+		if self.salary_structure:
+			self.calculate_component_amounts("earnings")
 
-		# if self.payroll_period:
-		# 	self.payroll_period_ = self.payroll_period.name
-		# 	self.remaining_sub_periods = get_remaining_sub_periods(
-		# 		self.employee, self.start_date, self.end_date, self.payroll_frequency, self.payroll_period
-		# 	)
+		# get remaining numbers of sub-period (period for which one salary is processed)
+		if self.payroll_period:
+			# self.payroll_period_ = self.payroll_period.name
+			self.remaining_sub_periods = get_remaining_sub_periods(
+				self.employee, self.start_date, self.end_date, self.payroll_frequency, self.payroll_period
+			)
+
+		self.gross_pay = self.get_component_totals("earnings", depends_on_payment_days=1)
+		self.base_gross_pay = flt(
+			flt(self.gross_pay) * flt(self.exchange_rate), self.precision("base_gross_pay")
+		)
+
+		if self.salary_structure:
+			self.calculate_component_amounts("deductions")
+
+		self.set_loan_repayment()
+		self.set_precision_for_component_amounts()
+		self.set_net_pay()
+		self.compute_income_tax_breakup()
+
+
 		current_eti_amount = get_eti_deduction(self) or 0
 
 
@@ -609,4 +626,27 @@ def get_remaining_sub_periods(employee, start_date, end_date, payroll_frequency,
 					"to_date": payroll_period.end_date
 				})
 	salary_slips = flt(salary_slips[0][0]) if salary_slips else 0
-	return sub_period #- salary_slips
+
+	excess_months = 0
+	taxable_amount_based_on = frappe.db.get_single_value(
+			"Payroll Settings", "calculate_annual_taxable_amount_based_on"
+		)
+	if (not taxable_amount_based_on or (taxable_amount_based_on and taxable_amount_based_on == "Payroll Period")):
+		joining_date, relieving_date = frappe.get_cached_value(
+				"Employee", employee, ["date_of_joining", "relieving_date"]
+			)
+
+		if joining_date:
+			joining_date = getdate(joining_date)
+
+		if relieving_date:
+			relieving_date = getdate(relieving_date)
+
+
+		if joining_date and joining_date > payroll_period.start_date:
+			excess_months += month_diff(joining_date, payroll_period.start_date) - 1
+
+		if relieving_date and relieving_date < payroll_period.end_date:
+			excess_months += month_diff(payroll_period.end_date, relieving_date) - 1
+
+	return sub_period + excess_months #- salary_slips
