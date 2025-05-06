@@ -15,6 +15,7 @@ fixtures = [
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'base']]	},
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Slip'], ["field_name", '=', 'payroll_entry']]	},
 	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", '=', 'custom_employee_type']]	},
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Payroll Settings'], ["fieldname", 'in', ['south_african_settings_section', 'paye_salary_component', 'uif_employee_salary_component', 'uif_employer_salary_component', 'sdl_salary_component']]]	},
 ]
 
 # Includes in <head>
@@ -205,4 +206,3 @@ user_data_fields = [
 # auth_hooks = [
 # 	"kartoza.auth.validate"
 # ]
-
