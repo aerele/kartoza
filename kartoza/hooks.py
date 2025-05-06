@@ -15,7 +15,9 @@ fixtures = [
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'base']]	},
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Slip'], ["field_name", '=', 'payroll_entry']]	},
 	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", '=', 'custom_employee_type']]	},
-	{"dt": "Custom Field", "filters": [["dt", '=', 'Payroll Settings'], ["fieldname", 'in', ['south_african_settings_section', 'paye_salary_component', 'uif_employee_salary_component', 'uif_employer_salary_component', 'sdl_salary_component']]]	},
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", '=', 'custom_id_number']]	},
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Payroll Settings'], ["fieldname", 'in', ['south_african_settings_section', 'paye_salary_component', 'uif_employee_salary_component', 'uif_employer_salary_component', 'sdl_salary_component', 'coida_salary_component']]]	},
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Company'], ["fieldname", '=', 'coida_registration_number']]	},
 ]
 
 # Includes in <head>
@@ -44,7 +46,10 @@ doctype_js = {
 	"Payroll Entry" : "custom_js/payroll_entry.js",
 	"Employee" : "custom_js/employee.js",
 	"Employee Benefit Claim" : "custom_js/employee_benefit_claim.js",
-	"Salary Structure": "custom_js/salary_structure.js"
+	"Salary Structure": "custom_js/salary_structure.js",
+	"COIDA Annual Return": "custom_js/coida_annual_return.js",
+	"Workplace Injury": "custom_js/workplace_injury.js",
+	"OID Claim": "custom_js/oid_claim.js"
 }
 # doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}

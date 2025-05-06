@@ -437,7 +437,8 @@ def make_custom_fields():
 		'Payroll Settings': [],
 		"Employee":[],
 		"Additional Salary":[],
-		"Salary Structure Assignment":[]
+		"Salary Structure Assignment":[],
+		"Company":[]
 	}
 
 	if not frappe.get_meta("HR Settings").get_field("amount_per_kilometer"):
@@ -463,6 +464,20 @@ def make_custom_fields():
 	if not frappe.get_meta("Salary Structure Assignment").get_field("annual_bonus"):
 		custom_fields["Salary Structure Assignment"].append(dict(fieldname="annual_bonus", label="Annual Bonus",
 						fieldtype="Currency", insert_after="base", allow_on_submit=True))
+						
+	# COIDA-related custom fields
+	if not frappe.get_meta("Payroll Settings").get_field("coida_salary_component"):
+		custom_fields["Payroll Settings"].append(dict(fieldname='coida_salary_component', label='COIDA Salary Component',
+						fieldtype='Link', options="Salary Component", insert_after='sdl_salary_component',
+						description="Salary Component used for Compensation for Occupational Injuries and Diseases Act (COIDA)"))
+						
+	if not frappe.get_meta("Company").get_field("coida_registration_number"):
+		custom_fields["Company"].append(dict(fieldname='coida_registration_number', label='COIDA Registration Number',
+						fieldtype='Data', insert_after='tax_id', description="COIDA Registration Number for the company"))
+						
+	if not frappe.get_meta("Employee").get_field("custom_id_number"):
+		custom_fields["Employee"].append(dict(fieldname='custom_id_number', label='ID Number',
+						fieldtype='Data', insert_after='passport_number', description="South African ID Number", length=13))
 
 	create_custom_fields(custom_fields)
 	rename_duplicate_fields(custom_fields)

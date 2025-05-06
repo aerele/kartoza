@@ -3,6 +3,33 @@ from frappe import _
 def get_data():
     return [
         {
+            "label": _("COIDA Management"),
+            "items": [
+                {
+                    "type": "doctype",
+                    "name": "COIDA Settings",
+                    "description": _("Configure COIDA Settings"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "COIDA Annual Return",
+                    "description": _("Annual Return for Compensation for Occupational Injuries and Diseases Act"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "Workplace Injury",
+                    "description": _("Record and manage workplace injuries"),
+                },
+                {
+                    "type": "doctype",
+                    "name": "OID Claim",
+                    "description": _("Manage Occupational Injury and Disease claims"),
+                }
+            ]
+        },
+        {
             "label": _("South African Statutory Reports"),
             "items": [
                 {
@@ -47,6 +74,116 @@ def get_data():
                     "type": "doctype",
                     "name": "Employee Type",
                     "description": _("Employee Type for South African Payroll"),
+                }
+            ]
+        },
+        {
+            "label": _("Tax Certificates and Reconciliations"),
+            "items": [
+                {
+                    "type": "doctype",
+                    "name": "EMP501 Reconciliation",
+                    "description": _("Bi-annual Employer Reconciliation Declaration"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "IRP5 Certificate",
+                    "description": _("Employee Tax Certificate"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "IT3a Certificate",
+                    "description": _("Employee Tax Certificate for Investment Income"),
+                },
+                {
+                    "type": "doctype",
+                    "name": "SARS e-Filing Integration",
+                    "description": _("Configure SARS e-Filing Integration"),
+                }
+            ]
+        },
+        {
+            "label": _("Regulatory Compliance"),
+            "items": [
+                {
+                    "type": "doctype",
+                    "name": "B-BBEE Certificate",
+                    "description": _("Broad-Based Black Economic Empowerment Certificate"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "Employment Equity Report",
+                    "description": _("Employment Equity Reporting"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "SETA Report",
+                    "description": _("Sector Education and Training Authority Report"),
+                }
+            ]
+        },
+        {
+            "label": _("Bargaining Councils"),
+            "items": [
+                {
+                    "type": "doctype",
+                    "name": "Bargaining Council",
+                    "description": _("Configure Bargaining Councils"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "Bargaining Council Deduction",
+                    "description": _("Bargaining Council Deductions"),
+                }
+            ]
+        },
+        {
+            "label": _("South African VAT"),
+            "items": [
+                {
+                    "type": "doctype",
+                    "name": "South African VAT Settings",
+                    "description": _("Configure South African VAT Settings"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "VAT201 Return",
+                    "description": _("VAT201 Return Submission"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "report",
+                    "name": "VAT Analysis",
+                    "doctype": "Sales Invoice",
+                    "is_query_report": True,
+                    "description": _("VAT Analysis Report"),
+                },
+                {
+                    "type": "doctype",
+                    "name": "VAT Vendor Type",
+                    "description": _("Configure VAT Vendor Types"),
+                }
+            ]
+        },
+        {
+            "label": _("South African Leave Management"),
+            "items": [
+                {
+                    "type": "doctype",
+                    "name": "South African Holiday",
+                    "description": _("South African Public Holidays"),
+                    "onboard": 1,
+                },
+                {
+                    "type": "doctype",
+                    "name": "Leave Policy Assignment",
+                    "description": _("South African Leave Policy Assignment"),
                 }
             ]
         },
