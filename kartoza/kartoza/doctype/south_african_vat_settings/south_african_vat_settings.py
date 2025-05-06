@@ -109,13 +109,16 @@ class SouthAfricanVATSettings(Document):
         """Create or update tax template for sales or purchase"""
         template_name = f"South Africa VAT {self.standard_vat_rate}% - {template_type}"
         
-        if frappe.db.exists("Tax Template", template_name):
-            tax_template = frappe.get_doc("Tax Template", template_name)
+        # Use the correct doctype name based on template type
+        doctype_name = f"{template_type} Taxes and Charges Template"
+        
+        if frappe.db.exists(doctype_name, template_name):
+            tax_template = frappe.get_doc(doctype_name, template_name)
         else:
-            tax_template = frappe.new_doc("Tax Template")
+            tax_template = frappe.new_doc(doctype_name)
             tax_template.title = template_name
+            tax_template.name = template_name
             tax_template.company = self.default_vat_report_company
-            tax_template.tax_type = "VAT"
             tax_template.is_default = 1
             
         # Clear existing taxes
@@ -125,7 +128,7 @@ class SouthAfricanVATSettings(Document):
         for rate in self.vat_rates:
             if not rate.is_exempt:  # Skip exempt rates
                 tax_template.append("taxes", {
-                    "tax_type": "On Net Total",
+                    "charge_type": "On Net Total",
                     "account_head": account,
                     "description": rate.rate_name,
                     "rate": rate.rate

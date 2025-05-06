@@ -5,6 +5,10 @@ def after_install():
 	make_custom_fields()
 
 def before_install():
+	# Check if Company Contribution DocType already exists
+	if frappe.db.exists("DocType", "Company Contribution"):
+		return
+		
 	doc = frappe.get_doc({
 			"docstatus": 0,
 			"idx": 0,
