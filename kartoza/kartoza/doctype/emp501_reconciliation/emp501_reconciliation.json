@@ -42,7 +42,9 @@
   "sars_submission_date",
   "column_break_34",
   "sars_submission_reference",
-  "sars_response"
+  "sars_response",
+  "section_break_37",
+  "e_filing_csv"
  ],
  "fields": [
   {
@@ -257,6 +259,17 @@
    "fieldtype": "Code",
    "label": "SARS Response",
    "options": "JSON"
+  },
+  {
+   "fieldname": "section_break_37",
+   "fieldtype": "Section Break",
+   "label": "Export Files"
+  },
+  {
+   "fieldname": "e_filing_csv",
+   "fieldtype": "Attach",
+   "label": "e-Filing CSV Export",
+   "read_only": 1
   }
  ],
  "index_web_pages_for_search": 1,
