@@ -69,9 +69,9 @@ frappe.ui.form.on('VAT201 Return', {
     company: function(frm) {
         // When company changes, fetch VAT registration number
         if (frm.doc.company) {
-            frappe.db.get_value('Company', frm.doc.company, 'vat_number', function(r) {
-                if (r && r.vat_number) {
-                    frm.set_value('vat_registration_number', r.vat_number);
+            frappe.db.get_value('Company', frm.doc.company, 'custom_vat_number', function(r) {
+                if (r && r.custom_vat_number) {
+                    frm.set_value('vat_registration_number', r.custom_vat_number);
                 } else {
                     // If company doesn't have VAT number, try to get from VAT settings
                     frappe.db.get_single_value('South African VAT Settings', 'vat_registration_number')
