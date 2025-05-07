@@ -490,8 +490,8 @@ def make_custom_fields():
 						fieldtype='Data', insert_after='tax_id', description="COIDA Registration Number for the company"))
 	
 	# Add VAT number field to Company
-	if not frappe.get_meta("Company").get_field("vat_number"):
-		custom_fields["Company"].append(dict(fieldname='vat_number', label='VAT Number',
+	if not frappe.get_meta("Company").get_field("custom_vat_number"):
+		custom_fields["Company"].append(dict(fieldname='custom_vat_number', label='VAT Number',
 						fieldtype='Data', insert_after='tax_id', description="South African VAT Number",
 						length=10))
 						

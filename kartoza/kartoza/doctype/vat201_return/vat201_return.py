@@ -20,7 +20,7 @@ class VAT201Return(Document):
         """Set VAT registration number from company"""
         if self.company and not self.vat_registration_number:
             # Try to get from company
-            vat_number = frappe.db.get_value("Company", self.company, "vat_number")
+            vat_number = frappe.db.get_value("Company", self.company, "custom_vat_number")
             if vat_number:
                 self.vat_registration_number = vat_number
             else:

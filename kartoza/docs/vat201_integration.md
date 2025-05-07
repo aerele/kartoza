@@ -41,7 +41,7 @@ This error occurs when the system attempts to access the `vat_number` field but 
 **Solutions**:
 
 1. **Ensure the VAT Number field exists**:
-   - The custom field `vat_number` should be added to the Company doctype
+   - The custom field `custom_vat_number` should be added to the Company doctype
    - This is handled in the `make_custom_fields` function in install.py
    - If missing, run `bench execute kartoza.install.make_custom_fields`
 
@@ -50,8 +50,8 @@ This error occurs when the system attempts to access the `vat_number` field but 
    - Verify field permissions if using field-level permissions
 
 3. **Validate field syntax**:
-   - Ensure calls to access the field use the correct fieldname: `vat_number`
-   - Some code might use `custom_vat_number` inconsistently
+   - Ensure calls to access the field use the correct fieldname: `custom_vat_number`
+   - Some legacy code might still use `vat_number` inconsistently
 
 ## VAT201 Return Process
 
@@ -94,9 +94,9 @@ The module includes VAT analysis reporting to:
 The VAT number field is added to the Company doctype during installation:
 
 ```python
-if not frappe.get_meta("Company").get_field("vat_number"):
+if not frappe.get_meta("Company").get_field("custom_vat_number"):
     custom_fields["Company"].append(dict(
-        fieldname='vat_number',
+        fieldname='custom_vat_number',
         label='VAT Number',
         fieldtype='Data',
         insert_after='tax_id',
