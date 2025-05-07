@@ -49,6 +49,7 @@ class EMP501Reconciliation(Document):
     def on_submit(self):
         self.status = "Prepared"
         
+    @frappe.whitelist()
     def fetch_emp201_submissions(self):
         """Fetch EMP201 submissions for the selected period"""
         if not self.from_date or not self.to_date:
@@ -82,6 +83,7 @@ class EMP501Reconciliation(Document):
         self.calculate_totals()
         return len(emp201_submissions)
     
+    @frappe.whitelist()
     def generate_irp5_certificates(self):
         """Generate IRP5 certificates for all employees for the period"""
         if not self.from_date or not self.to_date:
@@ -135,6 +137,7 @@ class EMP501Reconciliation(Document):
             
         return len(employees)
     
+    @frappe.whitelist()
     def submit_to_sars(self):
         """Submit the EMP501 reconciliation to SARS via e-Filing integration"""
         if self.status != "Prepared":
