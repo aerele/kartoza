@@ -1,10 +1,10 @@
-# Kartoza - South African Localization for ERPNext
+# Cohenix Kartoza - South African Localization for Cohenix ERP
 
 ## Overview
 
-Kartoza is a comprehensive South African localization module for ERPNext that provides essential features for businesses operating in South Africa. It covers statutory compliance requirements, tax regulations, payroll localization, and financial reporting specific to the South African context.
+Cohenix Kartoza is a comprehensive South African localization module for Cohenix ERPthat provides essential features for businesses operating in South Africa. It covers statutory compliance requirements, tax regulations, payroll localization, and financial reporting specific to the South African context.
 
-This module extends ERPNext's functionality to meet South African regulatory requirements, including SARS (South African Revenue Service) compliance, COIDA (Compensation for Occupational Injuries and Diseases Act) management, VAT (Value Added Tax) handling, and more.
+This module extends Cohenix ERP's functionality to meet South African regulatory requirements, including SARS (South African Revenue Service) compliance, COIDA (Compensation for Occupational Injuries and Diseases Act) management, VAT (Value Added Tax) handling, and more.
 
 ## Table of Contents
 
@@ -28,7 +28,7 @@ This module extends ERPNext's functionality to meet South African regulatory req
 
 ## Installation
 
-To install the Kartoza module:
+To install the Cohenix Kartoza module:
 
 ```bash
 # Navigate to your bench directory
@@ -44,7 +44,7 @@ bench --site your-site.local install-app kartoza
 bench --site your-site.local migrate
 ```
 
-After installation, the module will add South African localization features to your ERPNext instance.
+After installation, the module will add South African localization features to your Cohenix ERPinstance.
 
 ## Features
 
@@ -85,13 +85,13 @@ After installation, the module will add South African localization features to y
 
 ## Module Structure
 
-The Kartoza module follows the standard Frappe/ERPNext app structure with the following key components:
+The Cohenix Kartoza module follows the standard Frappe/Cohenix ERPapp structure with the following key components:
 
 ```
 kartoza/
 ├── kartoza/
 │   ├── __init__.py
-│   ├── hooks.py                  # App hooks for ERPNext integration
+│   ├── hooks.py                  # App hooks for Cohenix ERPintegration
 │   ├── config/                   # Module configuration
 │   │   └── kartoza.py            # Module configuration and desktop icons
 │   ├── kartoza/                  # Main module code
@@ -352,7 +352,7 @@ The employment equity features handle reporting requirements for employment equi
 
 ### Custom Fields
 
-The module adds custom fields to existing ERPNext doctypes to support South African requirements.
+The module adds custom fields to existing Cohenix ERPdoctypes to support South African requirements.
 
 **Key Files:**
 - `kartoza/kartoza/custom/company.json`: Custom fields for Company doctype
@@ -511,14 +511,14 @@ def get_data():
 
 ### Hooks
 
-The module hooks are defined in `kartoza/hooks.py` and integrate the module with ERPNext.
+The module hooks are defined in `kartoza/hooks.py` and integrate the module with Cohenix ERP.
 
 **Example Hooks:**
 ```python
 app_name = "kartoza"
 app_title = "Kartoza"
 app_publisher = "Your Organization"
-app_description = "South African Localization for ERPNext"
+app_description = "South African Localization for Cohenix ERP"
 app_icon = "octicon octicon-file-directory"
 app_color = "grey"
 app_email = "info@your-organization.com"
@@ -557,7 +557,7 @@ scheduler_events = {
 
 ### Adding a New Feature
 
-To add a new feature to the Kartoza module:
+To add a new feature to the Cohenix Kartoza module:
 
 1. Create a new DocType in the appropriate directory:
 ```bash
@@ -644,7 +644,7 @@ IRP5 certificates provide a summary of employee earnings and tax deductions for 
 
 ### Certificate Structure
 
-The IRP5 certificate in Kartoza is structured as follows:
+The IRP5 certificate in Cohenix Kartoza is structured as follows:
 
 1. **Main Certificate Document**:
    - Employee and tax period information
@@ -689,7 +689,7 @@ The IRP5 certificate functionality involves:
 
 ## Integration with HRMS
 
-Kartoza integrates seamlessly with the HRMS module to extend its functionality for South African requirements.
+Cohenix Kartoza integrates seamlessly with the HRMS module to extend its functionality for South African requirements.
 
 ### Payroll Extensions
 
@@ -723,7 +723,7 @@ Kartoza integrates seamlessly with the HRMS module to extend its functionality f
 
 ## Customized Salary Slip Calculation
 
-The Kartoza module extends the standard salary slip calculation to accommodate South African requirements.
+The Cohenix Kartoza module extends the standard salary slip calculation to accommodate South African requirements.
 
 ### South African Tax Calculation
 
@@ -774,7 +774,7 @@ The customization is implemented through:
 
 ## Documentation and Resources
 
-Comprehensive documentation for the Kartoza module is available in the following locations:
+Comprehensive documentation for the Cohenix Kartoza module is available in the following locations:
 
 1. **In-App Documentation**:
    - Help sections in each DocType
