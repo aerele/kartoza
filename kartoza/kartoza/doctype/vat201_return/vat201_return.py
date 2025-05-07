@@ -85,6 +85,7 @@ class VAT201Return(Document):
             
         self.db_update()
         
+    @frappe.whitelist()
     def submit_to_sars(self):
         """Submit VAT201 return to SARS e-Filing"""
         if self.status != "Prepared":
@@ -103,6 +104,7 @@ class VAT201Return(Document):
         frappe.msgprint("VAT201 Return submitted to SARS e-Filing")
         self.db_update()
         
+    @frappe.whitelist()
     def get_vat_transactions(self):
         """Get VAT transactions for the period"""
         # This method would fetch all sales and purchase invoices

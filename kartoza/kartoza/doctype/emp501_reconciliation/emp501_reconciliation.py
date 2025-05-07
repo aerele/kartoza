@@ -12,20 +12,58 @@ class EMP501Reconciliation(Document):
         self.calculate_totals()
         
     def validate_dates(self):
-        if self.from_date and self.to_date and getdate(self.from_date) > getdate(self.to_date):
-            frappe.throw("From Date cannot be after To Date")
+        """
+        Validate date ranges for EMP501 Reconciliation.
+        
+        The method enforces:
+        1. From Date is before To Date
+        2. Correct date ranges for Interim and Final periods according to SARS requirements
+        3. Valid tax year format
+        """
+        if not self.from_date or not self.to_date:
+            frappe.throw(_("Both From Date and To Date are required"), title=_("Missing Required Dates"))
+            
+        from_date = getdate(self.from_date)
+        to_date = getdate(self.to_date)
+        
+        if from_date > to_date:
+            frappe.throw(_("From Date cannot be after To Date"), title=_("Invalid Date Range"))
             
         # Validate reconciliation period
         if self.reconciliation_period == "Interim":
             # Interim period is March to August
-            if not (getdate(self.from_date).month == 3 and getdate(self.from_date).day == 1 and 
-                    getdate(self.to_date).month == 8 and getdate(self.to_date).day == 31):
-                frappe.throw("Interim period must be from March 1 to August 31")
+            if not (from_date.month == 3 and from_date.day == 1):
+                frappe.throw(_("For Interim reconciliation, From Date must be March 1"), 
+                             title=_("Invalid Interim Period Start Date"))
+                
+            if not (to_date.month == 8 and to_date.day == 31):
+                frappe.throw(_("For Interim reconciliation, To Date must be August 31"), 
+                             title=_("Invalid Interim Period End Date"))
+                
+            # Ensure same calendar year
+            if from_date.year != to_date.year:
+                frappe.throw(_("Interim period must be within the same calendar year"), 
+                             title=_("Invalid Year Range"))
+                
         elif self.reconciliation_period == "Final":
             # Final period is March to February
-            if not (getdate(self.from_date).month == 3 and getdate(self.from_date).day == 1 and 
-                    getdate(self.to_date).month == 2 and getdate(self.to_date).day in [28, 29]):
-                frappe.throw("Final period must be from March 1 to end of February")
+            if not (from_date.month == 3 and from_date.day == 1):
+                frappe.throw(_("For Final reconciliation, From Date must be March 1"), 
+                             title=_("Invalid Final Period Start Date"))
+                
+            if not (to_date.month == 2 and to_date.day in [28, 29]):
+                frappe.throw(_("For Final reconciliation, To Date must be the last day of February"), 
+                             title=_("Invalid Final Period End Date"))
+                
+            # Ensure correct tax year - February should be the year after March
+            if to_date.year != from_date.year + 1:
+                frappe.throw(_("Final period must span from March 1 to February of the next year"), 
+                             title=_("Invalid Tax Year"))
+                
+        # Set tax year field based on dates
+        tax_year_start = from_date.year
+        tax_year_end = to_date.year
+        self.tax_year = f"{tax_year_start}-{tax_year_end}"
     
     def calculate_totals(self):
         self.total_paye = 0
@@ -51,9 +89,25 @@ class EMP501Reconciliation(Document):
         
     @frappe.whitelist()
     def fetch_emp201_submissions(self):
-        """Fetch EMP201 submissions for the selected period"""
+        """
+        Fetch EMP201 submissions for the selected period.
+        
+        This method retrieves all submitted EMP201 Submissions within the specified date range
+        and adds them to the EMP201 Submissions table in the current document.
+        
+        Returns:
+            int: Number of EMP201 submissions fetched
+        
+        Raises:
+            frappe.ValidationError: If required fields are missing or database errors occur
+        """
         if not self.from_date or not self.to_date:
-            frappe.throw("Please set From Date and To Date first")
+            frappe.throw(_("Please set From Date and To Date before fetching submissions"), 
+                        title=_("Missing Date Range"))
+            
+        if not self.company:
+            frappe.throw(_("Company is required to fetch EMP201 submissions"), 
+                        title=_("Missing Company"))
             
         # Clear existing submissions
         self.emp201_submissions = []
@@ -62,15 +116,26 @@ class EMP501Reconciliation(Document):
         from_date = getdate(self.from_date)
         to_date = getdate(self.to_date)
         
-        # Get all EMP201 submissions for the period using explicit SQL query to avoid between issues
-        emp201_submissions = frappe.db.sql("""
-            SELECT name, posting_date, net_paye_payable as paye_payable, sdl_payable, uif_payable, eti_utilized_current_month as eti_utilized
-            FROM `tabEMP201 Submission`
-            WHERE company = %s 
-            AND docstatus = 1
-            AND posting_date >= %s
-            AND posting_date <= %s
-        """, (self.company, from_date, to_date), as_dict=1)
+        try:
+            # Get all EMP201 submissions for the period using explicit SQL query to avoid between issues
+            emp201_submissions = frappe.db.sql("""
+                SELECT name, posting_date, net_paye_payable as paye_payable, sdl_payable, uif_payable, 
+                       eti_utilized_current_month as eti_utilized
+                FROM `tabEMP201 Submission`
+                WHERE company = %s 
+                AND docstatus = 1
+                AND posting_date >= %s
+                AND posting_date <= %s
+            """, (self.company, from_date, to_date), as_dict=1)
+        except Exception as e:
+            error_msg = str(e)
+            if "Unknown column" in error_msg:
+                field_name = error_msg.split("Unknown column '")[1].split("'")[0]
+                frappe.throw(_(f"Database field not found: {field_name}. Please ensure the EMP201 Submission doctype is correctly set up with all required fields."),
+                           title=_("Field Reference Error"))
+            else:
+                frappe.throw(_(f"Error retrieving EMP201 submissions: {error_msg}"),
+                           title=_("Database Error"))
         
         # Add submissions to the table
         for submission in emp201_submissions:

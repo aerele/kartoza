@@ -19,7 +19,12 @@ This module extends ERPNext's functionality to meet South African regulatory req
 9. [Reports](#reports)
 10. [Configuration](#configuration)
 11. [Development Guide](#development-guide)
-12. [License](#license)
+12. [ETI Implementation](#eti-implementation)
+13. [IRP5 Certificates](#irp5-certificates)
+14. [Integration with HRMS](#integration-with-hrms)
+15. [Customized Salary Slip Calculation](#customized-salary-slip-calculation)
+16. [Documentation and Resources](#documentation-and-resources)
+17. [License](#license)
 
 ## Installation
 
@@ -581,6 +586,215 @@ To customize existing features:
 ```bash
 bench --site your-site.local migrate
 ```
+
+## ETI Implementation
+
+The Employment Tax Incentive (ETI) is a South African tax incentive aimed at encouraging employers to hire young and less experienced job seekers.
+
+### ETI Eligibility
+
+For an employee to qualify for ETI, they must meet the following criteria:
+
+- **Age**: Between 18-29 years old on the last day of the month
+- **Remuneration**: Monthly remuneration within qualifying thresholds
+- **Employment Period**: First 24 months of employment only
+- **Hiring Date**: Employed on or after October 1, 2013
+- **Documentation**: Valid South African ID or Asylum Seeker permit
+- **Minimum Wage**: Meet applicable minimum wage requirements
+
+### ETI Calculation
+
+The ETI amount is calculated based on the employee's monthly remuneration and period of employment:
+
+| Monthly Remuneration | First 12 Months | Second 12 Months |
+|----------------------|-----------------|------------------|
+| R0 - R2,000          | 50% of monthly remuneration | 25% of monthly remuneration |
+| R2,001 - R4,500      | R1,000 | R500 |
+| R4,501 - R6,500      | R1,000 - (0.5 × (Monthly Remuneration - R4,500)) | R500 - (0.25 × (Monthly Remuneration - R4,500)) |
+| Above R6,500         | R0 | R0 |
+
+### Technical Implementation
+
+ETI is implemented through several components:
+
+1. **Custom Employee Fields**:
+   - Hours per month for ETI calculation
+   - Date of birth for age validation
+   - Employment type and date of joining for eligibility
+
+2. **ETI Configuration Doctypes**:
+   - ETI Slab: Configuration for calculation parameters
+   - ETI Slab Details: Formulas for different remuneration brackets
+
+3. **ETI Calculation in Salary Slip**:
+   The ETI amount is calculated during salary slip generation using the following process:
+   - Validate employee eligibility (age, employment period)
+   - Determine appropriate remuneration bracket
+   - Apply correct formula based on employment period
+   - Prorate based on hours worked
+   - Track ETI utilization in Employee ETI Log
+
+4. **ETI Reporting**:
+   - Monthly reporting in EMP201 submissions
+   - Bi-annual reconciliation in EMP501 submissions
+
+## IRP5 Certificates
+
+IRP5 certificates provide a summary of employee earnings and tax deductions for the tax year. They are issued to employees annually and submitted to SARS as part of the EMP501 reconciliation.
+
+### Certificate Structure
+
+The IRP5 certificate in Kartoza is structured as follows:
+
+1. **Main Certificate Document**:
+   - Employee and tax period information
+   - Certificate type (IRP5 or IT3(a))
+   - Certificate status and submission status
+
+2. **Income Details**:
+   - Income sources categorized by SARS income codes
+   - Normal income, allowances, fringe benefits
+   - Non-taxable income
+
+3. **Deduction Details**:
+   - Deductions categorized by SARS deduction codes
+   - Retirement contributions, medical aid
+   - PAYE, UIF, and other statutory deductions
+
+### Certificate Generation
+
+IRP5 certificates can be generated through several methods:
+
+1. **Automatic Generation**:
+   - During EMP501 reconciliation
+   - Scheduled task for all employees
+
+2. **Manual Generation**:
+   - Individual certificate creation
+   - Batch generation for selected employees
+
+### Technical Implementation
+
+The IRP5 certificate functionality involves:
+
+1. **Data Collection**:
+   - Salary slip data for the tax year
+   - Income and deduction categorization
+   - Tax calculation summaries
+
+2. **SARS Compliance**:
+   - Use of standard SARS codes
+   - Validation against SARS requirements
+   - Support for e-Filing submissions
+
+## Integration with HRMS
+
+Kartoza integrates seamlessly with the HRMS module to extend its functionality for South African requirements.
+
+### Payroll Extensions
+
+1. **Salary Structure Extensions**:
+   - Support for South African statutory components
+   - Configuration for tax-specific salary components
+   - Special handling for annual bonuses
+
+2. **Salary Slip Customization**:
+   - South African tax calculation
+   - ETI processing
+   - Medical aid tax credits
+   - Tax rebates based on age
+
+3. **Leave Management**:
+   - South African public holidays
+   - Standard leave types required by law
+   - Integration with workplace injury management
+
+### Employee Extensions
+
+1. **Employee Record Extensions**:
+   - South African ID validation and processing
+   - Tax number management
+   - ETI eligibility tracking
+
+2. **Benefits Administration**:
+   - Medical aid scheme integration
+   - Retirement fund management
+   - Company contributions tracking
+
+## Customized Salary Slip Calculation
+
+The Kartoza module extends the standard salary slip calculation to accommodate South African requirements.
+
+### South African Tax Calculation
+
+1. **PAYE Calculation**:
+   - Progressive tax rates based on annual income
+   - Age-based tax rebates (primary, secondary, tertiary)
+   - Medical aid tax credits
+
+2. **ETI Processing**:
+   - Eligibility determination
+   - Amount calculation based on remuneration brackets
+   - Pro-rating based on hours worked
+
+3. **Statutory Deductions**:
+   - UIF (1% from employee, 1% from employer)
+   - SDL (1% from employer)
+   - COIDA (industry-specific rate from employer)
+
+### Technical Implementation
+
+The customization is implemented through:
+
+1. **Class Extension**:
+   ```python
+   class CustomSalarySlip(SalarySlip):
+       def validate(self):
+           super().validate()
+           # South African specific validations
+           
+       def calculate_net_pay(self):
+           # Extended calculation with South African specifics
+           
+       def calculate_variable_tax(self):
+           # South African tax calculation with rebates and credits
+   ```
+
+2. **Hooks Integration**:
+   ```python
+   # In hooks.py
+   doc_events = {
+       "Salary Slip": {
+           "validate": "kartoza.custom_py.salary_slip.CustomSalarySlip.validate",
+           "on_submit": "kartoza.custom_py.salary_slip.CustomSalarySlip.on_submit",
+           "on_cancel": "kartoza.custom_py.salary_slip.CustomSalarySlip.on_cancel"
+       }
+   }
+   ```
+
+## Documentation and Resources
+
+Comprehensive documentation for the Kartoza module is available in the following locations:
+
+1. **In-App Documentation**:
+   - Help sections in each DocType
+   - Field-level descriptions and tooltips
+
+2. **External Documentation**:
+   - [Comprehensive Technical & Functional Documentation](docs/comprehensive_documentation.md)
+   - [South African VAT Guide](docs/south_african_vat_guide.md)
+   - [PAYE and Payroll Guide](docs/payroll_guide.md)
+   - [COIDA Compliance Guide](docs/coida_guide.md)
+
+3. **Reference Materials**:
+   - Links to SARS documentation
+   - Relevant legislation references
+   - Calculation examples and case studies
+
+4. **Regular Updates**:
+   - Documentation is kept up to date with regulatory changes
+   - Budget speech updates are incorporated annually
+   - Legislative amendments are reflected promptly
 
 ## License
 
