@@ -38,10 +38,10 @@ class EMP501Reconciliation(Document):
             for submission in self.emp201_submissions:
                 if submission.emp201_submission:
                     emp201 = frappe.get_doc("EMP201 Submission", submission.emp201_submission)
-                    self.total_paye += flt(emp201.paye_payable)
+                    self.total_paye += flt(emp201.net_paye_payable)
                     self.total_sdl += flt(emp201.sdl_payable)
                     self.total_uif += flt(emp201.uif_payable)
-                    self.total_eti += flt(emp201.eti_utilized)
+                    self.total_eti += flt(emp201.eti_utilized_current_month)
         
         # Calculate total tax payable
         self.total_tax_payable = self.total_paye + self.total_sdl + self.total_uif - self.total_eti
@@ -58,22 +58,25 @@ class EMP501Reconciliation(Document):
         # Clear existing submissions
         self.emp201_submissions = []
         
-        # Get all EMP201 submissions for the period
-        emp201_submissions = frappe.get_all(
-            "EMP201 Submission",
-            filters={
-                "company": self.company,
-                "submission_date": ["between", [self.from_date, self.to_date]],
-                "docstatus": 1
-            },
-            fields=["name", "submission_date", "paye_payable", "sdl_payable", "uif_payable", "eti_utilized"]
-        )
+        # Convert string dates to datetime objects if needed
+        from_date = getdate(self.from_date)
+        to_date = getdate(self.to_date)
+        
+        # Get all EMP201 submissions for the period using explicit SQL query to avoid between issues
+        emp201_submissions = frappe.db.sql("""
+            SELECT name, posting_date, net_paye_payable as paye_payable, sdl_payable, uif_payable, eti_utilized_current_month as eti_utilized
+            FROM `tabEMP201 Submission`
+            WHERE company = %s 
+            AND docstatus = 1
+            AND posting_date >= %s
+            AND posting_date <= %s
+        """, (self.company, from_date, to_date), as_dict=1)
         
         # Add submissions to the table
         for submission in emp201_submissions:
             self.append("emp201_submissions", {
                 "emp201_submission": submission.name,
-                "submission_date": submission.submission_date,
+                "submission_date": submission.posting_date,
                 "paye": submission.paye_payable,
                 "sdl": submission.sdl_payable,
                 "uif": submission.uif_payable,
@@ -89,6 +92,10 @@ class EMP501Reconciliation(Document):
         if not self.from_date or not self.to_date:
             frappe.throw("Please set From Date and To Date first")
             
+        # Convert string dates to datetime objects if needed
+        from_date = getdate(self.from_date)
+        to_date = getdate(self.to_date)
+            
         # Get all employees who received salary during the period
         employees = frappe.db.sql("""
             SELECT DISTINCT employee, employee_name
@@ -97,7 +104,7 @@ class EMP501Reconciliation(Document):
             AND start_date >= %s
             AND end_date <= %s
             AND docstatus = 1
-        """, (self.company, self.from_date, self.to_date), as_dict=1)
+        """, (self.company, from_date, to_date), as_dict=1)
         
         # Clear existing certificates
         self.irp5_certificates = []
