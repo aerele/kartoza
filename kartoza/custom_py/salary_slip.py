@@ -749,18 +749,45 @@ def get_medical_aid(self, dependant):
 
 
 def get_eti_deduction(self):
+	"""
+	Calculate Employment Tax Incentive (ETI) deduction according to South African tax law.
+	
+	The ETI is a South African tax incentive aimed at encouraging employers to hire
+	young job seekers. It reduces the cost of hiring young people by allowing employers
+	to claim a portion of the PAYE (Pay As You Earn) tax for qualifying employees.
+	
+	Eligibility criteria:
+	1. Employee must be between 18-29 years old (as defined in eti_details)
+	2. Employee must have been employed on or after October 1, 2013
+	3. Employee's remuneration must be within qualifying thresholds
+	4. ETI can only be claimed for the first 24 months of employment
+	
+	Calculation factors:
+	- Monthly remuneration amount
+	- Whether in first or second 12-month period of employment
+	- Hours worked in the month (proportional calculation)
+	- Any carry-forward amounts from previous months
+	
+	Returns:
+		float: The calculated ETI amount for the current month
+	"""
 	current_eti_amount = 0
+	
+	# Get employee details needed for ETI calculation
 	employee_details = (
 		frappe.db.get_value(
 			"Employee",
 			{"name": self.employee},
-			["date_of_joining", "date_of_birth", "hours_per_month"],
+			["date_of_joining", "date_of_birth", "custom_hours_per_month"],  # Updated to use custom_hours_per_month
 			as_dict=True,
 		)
 		or {}
 	)
 
+	# Calculate employee's age
 	age = calculate_age(employee_details.get("date_of_birth"))
+	
+	# Get ETI configuration details for the current period
 	eti_details = frappe.db.get_value(
 		"ETI Slab",
 		{"start_date": ["<=", (self.posting_date)], "docstatus": 1},
@@ -769,17 +796,21 @@ def get_eti_deduction(self):
 	)
 
 	taxable_eti_amount = 0
+	
+	# Verify employee meets age requirements
 	if (
 		eti_details
 		and eti_details.get("minimum_age") <= age
 		and eti_details.get("maximum_age") >= age
 	):
-
+		# Check if employee is within 24-month ETI eligibility period
 		prev_eti = frappe.get_all(
 			"Employee ETI Log", {"employee": self.employee}, pluck="name"
 		)
 		prev_eti_count = len(prev_eti)
-		if prev_eti_count < 24:
+		
+		if prev_eti_count < 24:  # ETI can only be claimed for first 24 months
+			# Get salary components eligible for ETI calculation
 			eligible_components = {}
 			eti_eligible_components = frappe.get_all(
 				"Salary Component",
@@ -790,6 +821,8 @@ def get_eti_deduction(self):
 					"reduce_on_taxable_earning",
 				],
 			)
+			
+			# Create lookup dictionary for eligible components
 			for eti_component in eti_eligible_components:
 				eligible_components[eti_component.get("name")] = {
 					"taxable_earning_reduce_percentage": eti_component.get(
@@ -799,9 +832,11 @@ def get_eti_deduction(self):
 						"reduce_on_taxable_earning"
 					),
 				}
+			
+			# Calculate total ETI-eligible remuneration amount
 			for earning in self.earnings:
 				if earning.salary_component in eligible_components.keys():
-
+					# Apply special percentage reduction if applicable
 					if float(
 						eligible_components.get(earning.salary_component, {}).get(
 							"taxable_earning_reduce_percentage"
@@ -819,13 +854,16 @@ def get_eti_deduction(self):
 						) * earning.amount
 					else:
 						taxable_eti_amount += earning.amount
+			
+			# Determine which formula to use based on employment period
 			formula_field = (
-				"first_qualifying_12_months"
+				"first_qualifying_12_months"  # First 12 months of employment
 				if prev_eti_count <= 11
-				else "second_qualifying_12_months"
+				else "second_qualifying_12_months"  # Second 12 months of employment
 			)
+			
 			if taxable_eti_amount:
-
+				# Get the appropriate formula for the ETI calculation based on remuneration amount
 				formula = frappe.db.get_value(
 					"ETI Slab Details",
 					{
@@ -837,37 +875,44 @@ def get_eti_deduction(self):
 				)
 
 				if formula:
-
-					if not employee_details.hours_per_month:
+					# Ensure hours per month is set
+					if not employee_details.custom_hours_per_month:  # Updated to check custom_hours_per_month
 						frappe.throw(
 							"Set <b>Hours Per Month</b> for the Employee: {0}".format(
 								self.employee
 							)
 						)
 
-					if eti_details.hours_in_a_month < employee_details.hours_per_month:
-						employee_details.hours_per_month = eti_details.hours_in_a_month
+					# Cap hours to standard if employee works more than standard hours
+					hours_per_month = employee_details.custom_hours_per_month  # Updated to use custom_hours_per_month
+					if eti_details.hours_in_a_month < hours_per_month:
+						hours_per_month = eti_details.hours_in_a_month
 
+					# Apply formula and calculate prorated amount based on hours worked
 					self.data, self.default_data = self.get_data_for_eval()
 					self.data.monthly_remuneration = taxable_eti_amount
 					current_eti_amount = frappe.safe_eval(formula, self.data) or 0
+					
+					# Prorate ETI amount based on hours worked
 					current_eti_amount = (
 						current_eti_amount
 						/ eti_details.hours_in_a_month
-						* employee_details.hours_per_month
+						* hours_per_month
 					)
+					
+					# Add any carry-forward amount from previous period
 					prev_eti_balance_details = frappe.db.sql(
 						"""
-											SELECT carry_forwarding_eti_amount
-												FROM `tabEmployee ETI Log`
-											WHERE
-												employee = '{0}' AND
-												docstatus = 1 AND
-												date <= '{1}'
-											ORDER BY
-												date DESC
-											LIMIT 1
-										""".format(
+						SELECT carry_forwarding_eti_amount
+						FROM `tabEmployee ETI Log`
+						WHERE
+							employee = '{0}' AND
+							docstatus = 1 AND
+							date <= '{1}'
+						ORDER BY
+							date DESC
+						LIMIT 1
+						""".format(
 							self.employee, self.posting_date
 						),
 						as_dict=True,
@@ -878,6 +923,7 @@ def get_eti_deduction(self):
 						current_eti_amount += prev_eti_balance_details[0].get(
 							"carry_forwarding_eti_amount"
 						)
+	
 	return current_eti_amount
 
 

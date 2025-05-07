@@ -436,6 +436,16 @@ def before_install():
 	doc.save()
 
 def make_custom_fields():
+	"""
+	Create custom fields for South African payroll and tax requirements.
+	
+	This function adds several custom fields to standard doctypes:
+	- HR Settings: Adds kilometer reimbursement rates
+	- Payroll Settings: Adds SA tax calculation options and statutory components
+	- Employee: Adds SA ID number and payroll account fields 
+	- Company: Adds SA-specific registration numbers
+	- Additional Salary: Adds company contribution functionality
+	"""
 	custom_fields = {
 		'HR Settings': [],
 		'Payroll Settings': [],
@@ -453,31 +463,37 @@ def make_custom_fields():
 		custom_fields["Payroll Settings"].append(dict(fieldname='calculate_annual_taxable_amount_based_on', label='Calculate Annual Taxable Amount Based On',
 						fieldtype='Select', options="\nJoining and Relieving Date\nPayroll Period", default="Payroll Period", insert_after='daily_wages_fraction_for_half_day'))
 
-	if not frappe.get_meta("Employee").get_field("payroll_payable_account"):
-		custom_fields["Employee"].append(dict(fieldname='payroll_payable_account', label='Payroll Payable Bank Account',
+	if not frappe.get_meta("Employee").get_field("custom_payroll_payable_account"):
+		custom_fields["Employee"].append(dict(fieldname='custom_payroll_payable_account', label='Payroll Payable Bank Account',
 						fieldtype='Link', options="Bank Account", insert_after='payroll_cost_center'))
 
-	if not frappe.get_meta("Employee").get_field("hours_per_month"):
-		custom_fields["Employee"].append(dict(fieldname='hours_per_month', label='Hours Per Month',
-						fieldtype='Float', insert_after='payroll_payable_account'))
+	if not frappe.get_meta("Employee").get_field("custom_hours_per_month"):
+		custom_fields["Employee"].append(dict(fieldname='custom_hours_per_month', label='Hours Per Month',
+						fieldtype='Float', insert_after='custom_payroll_payable_account'))
 
 	if not frappe.get_meta("Additional Salary").get_field("is_company_contribution"):
 		custom_fields["Additional Salary"].append(dict(fieldname='is_company_contribution', label='Is Company Contribution',
 						fieldtype='Check', insert_after='column_break_8'))
 
-	if not frappe.get_meta("Salary Structure Assignment").get_field("annual_bonus"):
-		custom_fields["Salary Structure Assignment"].append(dict(fieldname="annual_bonus", label="Annual Bonus",
+	if not frappe.get_meta("Salary Structure Assignment").get_field("custom_annual_bonus"):
+		custom_fields["Salary Structure Assignment"].append(dict(fieldname="custom_annual_bonus", label="Annual Bonus",
 						fieldtype="Currency", insert_after="base", allow_on_submit=True))
 						
 	# COIDA-related custom fields
-	if not frappe.get_meta("Payroll Settings").get_field("coida_salary_component"):
-		custom_fields["Payroll Settings"].append(dict(fieldname='coida_salary_component', label='COIDA Salary Component',
+	if not frappe.get_meta("Payroll Settings").get_field("custom_coida_salary_component"):
+		custom_fields["Payroll Settings"].append(dict(fieldname='custom_coida_salary_component', label='COIDA Salary Component',
 						fieldtype='Link', options="Salary Component", insert_after='sdl_salary_component',
 						description="Salary Component used for Compensation for Occupational Injuries and Diseases Act (COIDA)"))
 						
-	if not frappe.get_meta("Company").get_field("coida_registration_number"):
-		custom_fields["Company"].append(dict(fieldname='coida_registration_number', label='COIDA Registration Number',
+	if not frappe.get_meta("Company").get_field("custom_coida_registration_number"):
+		custom_fields["Company"].append(dict(fieldname='custom_coida_registration_number', label='COIDA Registration Number',
 						fieldtype='Data', insert_after='tax_id', description="COIDA Registration Number for the company"))
+	
+	# Add VAT number field to Company
+	if not frappe.get_meta("Company").get_field("vat_number"):
+		custom_fields["Company"].append(dict(fieldname='vat_number', label='VAT Number',
+						fieldtype='Data', insert_after='tax_id', description="South African VAT Number",
+						length=10))
 						
 	if not frappe.get_meta("Employee").get_field("custom_id_number"):
 		custom_fields["Employee"].append(dict(fieldname='custom_id_number', label='ID Number',
@@ -487,6 +503,12 @@ def make_custom_fields():
 	rename_duplicate_fields(custom_fields)
 
 def rename_duplicate_fields(custom_fields):
+	"""
+	Handles duplicate fields by either deleting or renaming them.
+	
+	This ensures we don't have both a regular field and a custom_prefixed
+	version of the same field.
+	"""
 	from frappe.custom.doctype.custom_field.custom_field import rename_fieldname
 
 	for doctype in custom_fields:
@@ -497,3 +519,40 @@ def rename_duplicate_fields(custom_fields):
 				frappe.db.delete("Custom Field", custom_field_name)
 			elif not field_name and custom_field_name:
 				rename_fieldname(custom_field_name, field["fieldname"])
+				
+def validate_south_african_id(id_number):
+	"""
+	Validate South African ID number format and checksum.
+	
+	Format: YYMMDD SSSS CAZ
+	- YYMMDD: Date of birth
+	- SSSS: Gender (Females: 0000-4999, Males: 5000-9999)
+	- C: Citizenship (0: SA, 1: Permanent resident)
+	- A: Usually 8 or 9 (historical)
+	- Z: Checksum digit
+	
+	Returns:
+		bool: True if valid, False otherwise
+	"""
+	if not id_number or not id_number.isdigit() or len(id_number) != 13:
+		return False
+		
+	# Birth date validation
+	year = int(id_number[:2])
+	month = int(id_number[2:4])
+	day = int(id_number[4:6])
+	
+	if month < 1 or month > 12 or day < 1 or day > 31:
+		return False
+		
+	# Calculate checksum using Luhn algorithm
+	checksum = 0
+	for i, digit in enumerate(id_number[:-1]):
+		num = int(digit)
+		if i % 2 == 0:
+			checksum += num
+		else:
+			checksum += (num * 2 if num * 2 <= 9 else num * 2 - 9)
+			
+	check_digit = (10 - (checksum % 10)) % 10
+	return check_digit == int(id_number[-1])
