@@ -44,7 +44,23 @@ from kartoza.custom_py.payroll_entry import (
 
 
 class CustomSalarySlip(SalarySlip):
+	"""
+	Extension of the standard SalarySlip class to implement South African payroll requirements.
+	
+	This class handles South Africa-specific calculations including:
+	- Tax calculation with rebates and medical aid credits
+	- Employment Tax Incentive (ETI) processing
+	- South African working days calculation
+	- Retirement annuity deductions
+	- Annual bonus handling
+	"""
+	
 	def validate(self):
+		"""
+		Extends the standard validation to include South Africa-specific validations:
+		- Prevents duplicate salary slips for the same payroll period
+		- Validates that all salary components have associated accounts
+		"""
 		super().validate()
 		frequency = get_current_block_period(self)
 		employee_frequency = get_employee_frequency_map()
@@ -52,13 +68,21 @@ class CustomSalarySlip(SalarySlip):
 			self.employee, frequency[employee_frequency[self.employee]]
 		):
 			frappe.throw(
-				" Salary Slip already created for current {0}".format(
+				_("Salary Slip already created for current {0}").format(
 					employee_frequency[self.employee]
 				)
 			)
 		self.validate_component_account()
 
 	def validate_component_account(self):
+		"""
+		Ensures all salary components have associated GL accounts.
+		This is critical for accurate financial reporting and compliance with 
+		South African accounting requirements.
+		
+		Raises:
+			frappe.ValidationError: If any salary component is missing an account
+		"""
 		for component_type in ["earnings", "deductions"]:
 			for row in self.get(component_type):
 				if not frappe.db.get_value(
@@ -67,7 +91,7 @@ class CustomSalarySlip(SalarySlip):
 					"account",
 				):
 					frappe.throw(
-						_("Please set account in Salary Component {0}").format(
+						_("Please set account in Salary Component {0}. All components must have associated accounts for South African payroll compliance.").format(
 							get_link_to_form("Salary Component", row.salary_component)
 						)
 					)
@@ -701,35 +725,99 @@ class CustomSalarySlip(SalarySlip):
 
 
 def get_retirement_annuity(self):
-	ra = frappe.db.get_value(
-		"Employee Private Benefit",
-		{
-			"effective_from": ["<=", self.start_date],
-			"disable": 0,
-			"employee": self.employee,
-		},
-		order_by="effective_from",
-	)
-	res = frappe._dict({})
-	self.private_medical_aid = (
-		frappe.db.get_value(
+	"""
+	Calculate retirement annuity deduction for the employee.
+	
+	Retrieves the employee's private retirement annuity benefit configuration
+	and calculates the monthly deduction amount based on South African tax rules.
+	
+	The function enforces maximum amount limits, ensuring compliance with 
+	South African tax regulations for retirement annuity deductions.
+	
+	Returns:
+		frappe._dict: Dictionary containing retirement annuity details:
+			- limit_percent: Maximum percentage of income allowed for RA deduction
+			- ra_amount: Monthly RA amount to be deducted
+	"""
+	# Get the most recent applicable retirement annuity benefit record
+	try:
+		# Query for the employee's applicable private benefit
+		ra = frappe.db.get_value(
 			"Employee Private Benefit",
 			{
 				"effective_from": ["<=", self.start_date],
 				"disable": 0,
 				"employee": self.employee,
 			},
-			"private_medical_aid",
+			order_by="effective_from desc",  # Get the most recent applicable record
 		)
-		or 0
-	)
-	if ra:
-		ra = frappe.get_doc("Employee Private Benefit", ra)
-		res["limit_percent"] = ra.maximum_
-		res["ra_amount"] = ra.annuity_amount
-		if (ra.maximum_amount // 12) < ra.annuity_amount:
-			res["ra_amount"] = ra.maximum_amount // 12
-	return res
+		
+		res = frappe._dict({})
+		
+		# Get private medical aid information in the same query to reduce DB calls
+		self.private_medical_aid = (
+			frappe.db.get_value(
+				"Employee Private Benefit",
+				{
+					"effective_from": ["<=", self.start_date],
+					"disable": 0,
+					"employee": self.employee,
+				},
+				"private_medical_aid",
+			)
+			or 0
+		)
+		
+		if ra:
+			# Get the full document to access all fields
+			ra_doc = frappe.get_doc("Employee Private Benefit", ra)
+			
+			# Set the maximum percentage limit
+			if hasattr(ra_doc, 'maximum_'):
+				res["limit_percent"] = flt(ra_doc.maximum_)
+			else:
+				frappe.msgprint(
+					_("Maximum percentage limit not set for Retirement Annuity benefit for employee {0}").format(
+						self.employee_name or self.employee
+					),
+					indicator="orange",
+					alert=True
+				)
+				res["limit_percent"] = 0
+			
+			# Set the monthly RA amount, respecting the maximum monthly amount
+			if hasattr(ra_doc, 'annuity_amount'):
+				res["ra_amount"] = flt(ra_doc.annuity_amount)
+				
+				# Apply monthly maximum if specified
+				if hasattr(ra_doc, 'maximum_amount') and ra_doc.maximum_amount:
+					monthly_max = flt(ra_doc.maximum_amount) / 12
+					if monthly_max < res["ra_amount"]:
+						res["ra_amount"] = monthly_max
+						frappe.msgprint(
+							_("Retirement Annuity amount capped at monthly maximum of {0} for employee {1}").format(
+								frappe.bold(fmt_money(monthly_max, currency=self.currency)),
+								self.employee_name or self.employee
+							),
+							indicator="blue",
+							alert=True
+						)
+			else:
+				res["ra_amount"] = 0
+		
+		return res
+	
+	except Exception as e:
+		frappe.log_error(
+			_("Error in Retirement Annuity calculation: {0} for employee {1}").format(str(e), self.employee),
+			"Retirement Annuity Calculation Error"
+		)
+		frappe.msgprint(
+			_("Error in Retirement Annuity calculation. Using zero amount."),
+			indicator="red",
+			alert=True
+		)
+		return frappe._dict({"limit_percent": 0, "ra_amount": 0})
 
 
 def get_medical_aid(self, dependant):
@@ -771,171 +859,302 @@ def get_eti_deduction(self):
 	Returns:
 		float: The calculated ETI amount for the current month
 	"""
-	current_eti_amount = 0
-	
-	# Get employee details needed for ETI calculation
-	employee_details = (
-		frappe.db.get_value(
-			"Employee",
-			{"name": self.employee},
-			["date_of_joining", "date_of_birth", "custom_hours_per_month"],  # Updated to use custom_hours_per_month
+	try:
+		current_eti_amount = 0
+		
+		# Get employee details needed for ETI calculation
+		employee_details = (
+			frappe.db.get_value(
+				"Employee",
+				{"name": self.employee},
+				["date_of_joining", "date_of_birth", "custom_hours_per_month"],
+				as_dict=True,
+			)
+			or {}
+		)
+
+		# Validate required employee data
+		if not employee_details.get("date_of_birth"):
+			frappe.msgprint(
+				_("Employee {0} does not have date of birth. ETI calculation skipped.").format(self.employee),
+				indicator="orange",
+				alert=True
+			)
+			return 0
+			
+		if not employee_details.get("date_of_joining"):
+			frappe.msgprint(
+				_("Employee {0} does not have date of joining. ETI calculation skipped.").format(self.employee),
+				indicator="orange",
+				alert=True
+			)
+			return 0
+
+		# Calculate employee's age
+		age = calculate_age(employee_details.get("date_of_birth"))
+		
+		# Get ETI configuration details for the current period
+		eti_details = frappe.db.get_value(
+			"ETI Slab",
+			{"start_date": ["<=", (self.posting_date)], "docstatus": 1},
+			["minimum_age", "maximum_age", "name", "hours_in_a_month"],
 			as_dict=True,
 		)
-		or {}
-	)
-
-	# Calculate employee's age
-	age = calculate_age(employee_details.get("date_of_birth"))
-	
-	# Get ETI configuration details for the current period
-	eti_details = frappe.db.get_value(
-		"ETI Slab",
-		{"start_date": ["<=", (self.posting_date)], "docstatus": 1},
-		["minimum_age", "maximum_age", "name", "hours_in_a_month"],
-		as_dict=True,
-	)
-
-	taxable_eti_amount = 0
-	
-	# Verify employee meets age requirements
-	if (
-		eti_details
-		and eti_details.get("minimum_age") <= age
-		and eti_details.get("maximum_age") >= age
-	):
-		# Check if employee is within 24-month ETI eligibility period
-		prev_eti = frappe.get_all(
-			"Employee ETI Log", {"employee": self.employee}, pluck="name"
-		)
-		prev_eti_count = len(prev_eti)
 		
-		if prev_eti_count < 24:  # ETI can only be claimed for first 24 months
-			# Get salary components eligible for ETI calculation
-			eligible_components = {}
-			eti_eligible_components = frappe.get_all(
-				"Salary Component",
-				{"custom_allow_for_eti": 1},
-				[
-					"name",
-					"taxable_earning_reduce_percentage",
-					"reduce_on_taxable_earning",
-				],
+		# Validate ETI configuration
+		if not eti_details:
+			frappe.msgprint(
+				_("No valid ETI Slab found for date {0}. Please ensure ETI slabs are properly configured.").format(
+					self.posting_date
+				),
+				indicator="red",
+				alert=True
 			)
-			
-			# Create lookup dictionary for eligible components
-			for eti_component in eti_eligible_components:
-				eligible_components[eti_component.get("name")] = {
-					"taxable_earning_reduce_percentage": eti_component.get(
-						"taxable_earning_reduce_percentage"
-					),
-					"reduce_on_taxable_earning": eti_component.get(
-						"reduce_on_taxable_earning"
-					),
-				}
-			
-			# Calculate total ETI-eligible remuneration amount
-			for earning in self.earnings:
-				if earning.salary_component in eligible_components.keys():
-					# Apply special percentage reduction if applicable
-					if float(
-						eligible_components.get(earning.salary_component, {}).get(
-							"taxable_earning_reduce_percentage"
-						)
-					) > 0 and eligible_components.get(earning.salary_component, {}).get(
-						"reduce_on_taxable_earning"
-					):
-						taxable_eti_amount += (
-							float(
-								eligible_components.get(
-									earning.salary_component, {}
-								).get("taxable_earning_reduce_percentage")
-							)
-							/ 100
-						) * earning.amount
-					else:
-						taxable_eti_amount += earning.amount
-			
-			# Determine which formula to use based on employment period
-			formula_field = (
-				"first_qualifying_12_months"  # First 12 months of employment
-				if prev_eti_count <= 11
-				else "second_qualifying_12_months"  # Second 12 months of employment
+			return 0
+
+		taxable_eti_amount = 0
+		
+		# Verify employee meets age requirements
+		if (
+			eti_details
+			and eti_details.get("minimum_age") <= age
+			and eti_details.get("maximum_age") >= age
+		):
+			# Check if employee is within 24-month ETI eligibility period
+			prev_eti = frappe.get_all(
+				"Employee ETI Log", {"employee": self.employee}, pluck="name"
 			)
+			prev_eti_count = len(prev_eti)
 			
-			if taxable_eti_amount:
-				# Get the appropriate formula for the ETI calculation based on remuneration amount
-				formula = frappe.db.get_value(
-					"ETI Slab Details",
-					{
-						"parent": eti_details.get("name"),
-						"from_amount": ["<=", taxable_eti_amount],
-						"to_amount": [">=", taxable_eti_amount],
-					},
-					formula_field,
+			if prev_eti_count < 24:  # ETI can only be claimed for first 24 months
+				# Get salary components eligible for ETI calculation
+				eligible_components = {}
+				eti_eligible_components = frappe.get_all(
+					"Salary Component",
+					{"custom_allow_for_eti": 1},
+					[
+						"name",
+						"taxable_earning_reduce_percentage",
+						"reduce_on_taxable_earning",
+					],
 				)
-
-				if formula:
-					# Ensure hours per month is set
-					if not employee_details.custom_hours_per_month:  # Updated to check custom_hours_per_month
-						frappe.throw(
-							"Set <b>Hours Per Month</b> for the Employee: {0}".format(
-								self.employee
-							)
-						)
-
-					# Cap hours to standard if employee works more than standard hours
-					hours_per_month = employee_details.custom_hours_per_month  # Updated to use custom_hours_per_month
-					if eti_details.hours_in_a_month < hours_per_month:
-						hours_per_month = eti_details.hours_in_a_month
-
-					# Apply formula and calculate prorated amount based on hours worked
-					self.data, self.default_data = self.get_data_for_eval()
-					self.data.monthly_remuneration = taxable_eti_amount
-					current_eti_amount = frappe.safe_eval(formula, self.data) or 0
-					
-					# Prorate ETI amount based on hours worked
-					current_eti_amount = (
-						current_eti_amount
-						/ eti_details.hours_in_a_month
-						* hours_per_month
+				
+				# Check if any eligible components exist
+				if not eti_eligible_components:
+					frappe.msgprint(
+						_("No salary components marked as eligible for ETI. ETI calculation skipped."),
+						indicator="orange",
+						alert=True
 					)
+					return 0
 					
-					# Add any carry-forward amount from previous period
-					prev_eti_balance_details = frappe.db.sql(
-						"""
-						SELECT carry_forwarding_eti_amount
-						FROM `tabEmployee ETI Log`
-						WHERE
-							employee = '{0}' AND
-							docstatus = 1 AND
-							date <= '{1}'
-						ORDER BY
-							date DESC
-						LIMIT 1
-						""".format(
-							self.employee, self.posting_date
+				# Create lookup dictionary for eligible components
+				for eti_component in eti_eligible_components:
+					eligible_components[eti_component.get("name")] = {
+						"taxable_earning_reduce_percentage": eti_component.get(
+							"taxable_earning_reduce_percentage"
 						),
-						as_dict=True,
+						"reduce_on_taxable_earning": eti_component.get(
+							"reduce_on_taxable_earning"
+						),
+					}
+				
+				# Calculate total ETI-eligible remuneration amount
+				for earning in self.earnings:
+					if earning.salary_component in eligible_components.keys():
+						# Apply special percentage reduction if applicable
+						if float(
+							eligible_components.get(earning.salary_component, {}).get(
+								"taxable_earning_reduce_percentage", 0
+							) or 0
+						) > 0 and eligible_components.get(earning.salary_component, {}).get(
+							"reduce_on_taxable_earning"
+						):
+							taxable_eti_amount += (
+								float(
+									eligible_components.get(
+										earning.salary_component, {}
+									).get("taxable_earning_reduce_percentage", 0) or 0
+								)
+								/ 100
+							) * earning.amount
+						else:
+							taxable_eti_amount += earning.amount
+				
+				# Determine which formula to use based on employment period
+				formula_field = (
+					"first_qualifying_12_months"  # First 12 months of employment
+					if prev_eti_count <= 11
+					else "second_qualifying_12_months"  # Second 12 months of employment
+				)
+				
+				if taxable_eti_amount:
+					# Get the appropriate formula for the ETI calculation based on remuneration amount
+					formula = frappe.db.get_value(
+						"ETI Slab Details",
+						{
+							"parent": eti_details.get("name"),
+							"from_amount": ["<=", taxable_eti_amount],
+							"to_amount": [">=", taxable_eti_amount],
+						},
+						formula_field,
 					)
-					if prev_eti_balance_details and prev_eti_balance_details[0].get(
-						"carry_forwarding_eti_amount"
-					):
-						current_eti_amount += prev_eti_balance_details[0].get(
-							"carry_forwarding_eti_amount"
+					
+					if not formula:
+						frappe.msgprint(
+							_("No applicable ETI formula found for remuneration amount {0}. ETI calculation skipped.").format(
+								taxable_eti_amount
+							),
+							indicator="orange",
+							alert=True
 						)
-	
-	return current_eti_amount
+						return 0
+
+					if formula:
+						# Ensure hours per month is set
+						if not employee_details.custom_hours_per_month:
+							frappe.throw(
+								_("Hours Per Month not set for Employee: {0}. This is required for ETI calculation.").format(
+									frappe.bold(self.employee_name or self.employee)
+								)
+							)
+
+						# Cap hours to standard if employee works more than standard hours
+						hours_per_month = flt(employee_details.custom_hours_per_month)
+						if flt(eti_details.hours_in_a_month) < hours_per_month:
+							hours_per_month = flt(eti_details.hours_in_a_month)
+
+						# Apply formula and calculate prorated amount based on hours worked
+						self.data, self.default_data = self.get_data_for_eval()
+						self.data.monthly_remuneration = taxable_eti_amount
+						
+						try:
+							current_eti_amount = frappe.safe_eval(formula, self.data) or 0
+						except Exception as e:
+							frappe.log_error(
+								_("ETI formula evaluation error: {0}, Formula: {1}").format(str(e), formula),
+								"ETI Calculation Error"
+							)
+							frappe.msgprint(
+								_("Error in ETI formula evaluation. Please check the ETI Slab configuration."),
+								indicator="red",
+								alert=True
+							)
+							return 0
+						
+						# Prorate ETI amount based on hours worked
+						if flt(eti_details.hours_in_a_month) > 0:  # Avoid division by zero
+							current_eti_amount = (
+								flt(current_eti_amount)
+								/ flt(eti_details.hours_in_a_month)
+								* flt(hours_per_month)
+							)
+						
+						# Add any carry-forward amount from previous period
+						prev_eti_balance_details = frappe.db.sql(
+							"""
+							SELECT carry_forwarding_eti_amount
+							FROM `tabEmployee ETI Log`
+							WHERE
+								employee = %(employee)s AND
+								docstatus = 1 AND
+								date <= %(posting_date)s
+							ORDER BY
+								date DESC
+							LIMIT 1
+							""",
+							{
+								"employee": self.employee,
+								"posting_date": self.posting_date
+							},
+							as_dict=True,
+						)
+						if prev_eti_balance_details and prev_eti_balance_details[0].get(
+							"carry_forwarding_eti_amount"
+						):
+							current_eti_amount += flt(prev_eti_balance_details[0].get(
+								"carry_forwarding_eti_amount"
+							))
+				else:
+					frappe.msgprint(
+						_("No eligible earnings found for ETI calculation for employee {0}.").format(
+							self.employee_name or self.employee
+						),
+						indicator="orange",
+						alert=True
+					)
+			else:
+				frappe.msgprint(
+					_("Employee {0} has exceeded the 24-month ETI eligibility period.").format(
+						self.employee_name or self.employee
+					),
+					indicator="blue",
+					alert=True
+				)
+		else:
+			if age < eti_details.get("minimum_age") or age > eti_details.get("maximum_age"):
+				frappe.msgprint(
+					_("Employee {0} does not meet the age requirement ({1}-{2} years) for ETI.").format(
+						self.employee_name or self.employee,
+						eti_details.get("minimum_age"),
+						eti_details.get("maximum_age")
+					),
+					indicator="blue",
+					alert=True
+				)
+		
+		return flt(current_eti_amount, 2)  # Return with 2 decimal precision
+		
+	except Exception as e:
+		frappe.log_error(
+			_("ETI Calculation Error: {0} for employee {1}").format(str(e), self.employee),
+			"ETI Calculation Error"
+		)
+		frappe.msgprint(
+			_("Error in ETI calculation. Please check the error log for details."),
+			indicator="red",
+			alert=True
+		)
+		return 0
 
 
 def calculate_age(date_of_birth):
-	dob = datetime.strptime(str(date_of_birth), "%Y-%m-%d")
+	"""
+	Calculate age based on date of birth
+	
+	Args:
+		date_of_birth (str or date): The employee's date of birth
+		
+	Returns:
+		int: Age in years
+		
+	Raises:
+		ValueError: If date_of_birth is invalid or None
+	"""
+	if not date_of_birth:
+		raise ValueError("Date of birth is required to calculate age")
+		
+	if isinstance(date_of_birth, str):
+		try:
+			dob = datetime.strptime(date_of_birth, "%Y-%m-%d")
+		except ValueError:
+			frappe.log_error(
+				f"Invalid date format for date of birth: {date_of_birth}",
+				"ETI Calculation Error"
+			)
+			raise ValueError(f"Invalid date format for date of birth: {date_of_birth}")
+	else:
+		dob = datetime.combine(date_of_birth, datetime.min.time())
+		
 	current_date = datetime.now()
 	age = current_date.year - dob.year
+	
 	# Adjust age if the birthday hasn't occurred yet this year
 	if current_date.month < dob.month or (
 		current_date.month == dob.month and current_date.day < dob.day
 	):
 		age -= 1
+		
 	return age
 
 
@@ -963,24 +1182,84 @@ def get_total_weekend_days(year_start, year_end):
 
 
 def get_tax_rebate(self, dob):
-	if isinstance(dob, str):
-		dob = datetime.strptime(dob, "%y-%m-%d")
-	period_end_date = self.payroll_period.end_date
-	age = period_end_date.year - dob.year - ((period_end_date.month, period_end_date.day) < (dob.month, dob.day))
-	name = frappe.db.get_value(
-		"Tax Rebates Rate", {"payroll_period": self.payroll_period.name}
-	)
-	if name:
+	"""
+	Calculate tax rebate based on employee's age according to South African tax rules.
+	
+	South African tax rebates are age-dependent with three categories:
+	- Primary: For all taxpayers
+	- Secondary: Additional rebate for those 65 and older
+	- Tertiary: Additional rebate for those 75 and older
+	
+	Args:
+		dob (date or str): Employee's date of birth
+		
+	Returns:
+		float: Monthly tax rebate amount based on age and configured rates
+	"""
+	try:
+		# Parse date string if needed
+		if isinstance(dob, str):
+			try:
+				if len(dob.split('-')[0]) == 2:  # If year is in YY format
+					dob = datetime.strptime(dob, "%y-%m-%d")
+				else:  # If year is in YYYY format
+					dob = datetime.strptime(dob, "%Y-%m-%d")
+			except ValueError:
+				frappe.log_error(
+					f"Invalid date format for date of birth: {dob}",
+					"Tax Rebate Calculation Error"
+				)
+				raise ValueError(f"Invalid date format for date of birth: {dob}")
+		
+		# Get end date of payroll period for age calculation
+		period_end_date = self.payroll_period.end_date
+		
+		# Calculate age as of the end of the tax year (important for tax purposes)
+		age = period_end_date.year - dob.year - ((period_end_date.month, period_end_date.day) < (dob.month, dob.day))
+		
+		# Get applicable tax rebate rates for the payroll period
+		name = frappe.db.get_value(
+			"Tax Rebates Rate", {"payroll_period": self.payroll_period.name}
+		)
+		
+		if not name:
+			frappe.msgprint(
+				_("No Tax Rebates Rate found for Payroll Period {0}. Using zero rebate.").format(
+					self.payroll_period.name
+				),
+				indicator="orange",
+				alert=True
+			)
+			return 0
+		
+		# Get rebate details
 		doc = frappe.get_doc("Tax Rebates Rate", name)
-		tax_rebate = (doc.primary / 12) or 0
-
+		
+		# Calculate monthly primary rebate (for all taxpayers)
+		tax_rebate = flt(doc.primary / 12) or 0
+		
+		# Add secondary rebate for taxpayers 65 and older
 		if age >= 65:
-			tax_rebate += (doc.secondary / 12) or 0
+			tax_rebate += flt(doc.secondary / 12) or 0
+			
+			# Add tertiary rebate for taxpayers 75 and older
 			if age >= 75:
-				tax_rebate += (doc.tertiary / 12) or 0
-
+				tax_rebate += flt(doc.tertiary / 12) or 0
+		
 		return tax_rebate
-	return 0
+	except Exception as e:
+		frappe.log_error(
+			_("Error in Tax Rebate calculation: {0} for employee {1}, DOB: {2}").format(
+				str(e), self.employee, dob
+			),
+			"Tax Rebate Calculation Error"
+		)
+		frappe.msgprint(
+			_("Error in Tax Rebate calculation. Using zero rebate."),
+			indicator="red",
+			alert=True
+		)
+		return 0
 
 
 def get_remaining_sub_periods(
