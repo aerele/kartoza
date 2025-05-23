@@ -147,7 +147,7 @@ class CustomSalarySlip(SalarySlip):
 				"docstatus": 1,
 				"from_date": ("<=", self.end_date),
 			},
-			"annual_bonus",
+			"custom_annual_bonus",
 			order_by="from_date desc",
 		) or 0
 

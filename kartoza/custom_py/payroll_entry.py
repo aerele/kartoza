@@ -70,6 +70,9 @@ class CustomPayrollEntry(PayrollEntry):
 				i.custom_employee_type = frappe.db.get_value("Employee", i.employee, "custom_employee_type")
 
 			if not i.custom_payroll_payable_bank_account:
+				# Fetch from the new 'payroll_payable_account' field on Employee,
+				# which should store the name of the Bank Account.
+				# This aligns with the 'fetch_from' in Payroll Employee Detail's custom field definition.
 				i.custom_payroll_payable_bank_account = frappe.db.get_value("Employee", i.employee, "payroll_payable_account")
 
 			if i.custom_payroll_payable_bank_account:

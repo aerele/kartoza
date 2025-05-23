@@ -13,3 +13,4 @@ execute:frappe.db.set_value("Company Contribution", {"parenttype": "Salary Struc
 execute:frappe.db.set_value("Salary Component", "4142 SDL Contribution", "formula", "taxable_value/100 if taxable_value!=0 else (BS+BS_3602+bonus_3605_1+bonus_3605+bonus_3655)/100")
 execute:frappe.db.set_value("Company Contribution", {"parenttype": "Salary Structure", "salary_component": "4142 SDL Contribution", "parentfield": "company_contribution"}, "formula", "taxable_value/100 if taxable_value!=0 else (BS+BS_3602+bonus_3605_1+bonus_3605+bonus_3655)/100")
 kartoza.patches.remove_duplicate_fields
+kartoza.patches.add_payroll_payable_to_employee
