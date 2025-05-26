@@ -1,0 +1,4 @@
+kartoza.patches.remove_duplicate_fields
+kartoza.patches.update_payroll_entry
+kartoza.patches.add_payroll_payable_to_employee
+# kartoza.patches.migrate_custom_to_payroll_payable # Commented out as Employee.custom_payroll_payable_account is the correct source for Bank Account for Kartoza payroll. Employee.payroll_payable_account might be for GL Account.

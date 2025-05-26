@@ -69,18 +69,37 @@ class CustomPayrollEntry(PayrollEntry):
 			if not i.custom_employee_type:
 				i.custom_employee_type = frappe.db.get_value("Employee", i.employee, "custom_employee_type")
 
+			frappe.log_error(f"Employee: {i.employee} - Initial child table i.custom_payroll_payable_bank_account: '{i.custom_payroll_payable_bank_account}'", "Kartoza Payroll Debug")
+
 			if not i.custom_payroll_payable_bank_account:
 				# Fetch from the new 'payroll_payable_account' field on Employee,
 				# which should store the name of the Bank Account.
 				# This aligns with the 'fetch_from' in Payroll Employee Detail's custom field definition.
-				i.custom_payroll_payable_bank_account = frappe.db.get_value("Employee", i.employee, "payroll_payable_account")
+				# User confirmed 'custom_payroll_payable_account' on Employee master holds the Bank Account name.
+				value_from_employee_master = frappe.db.get_value("Employee", i.employee, "custom_payroll_payable_account")
+				frappe.log_error(f"Employee: {i.employee} - Value fetched from Employee.custom_payroll_payable_account: '{value_from_employee_master}'", "Kartoza Payroll Debug")
+				i.custom_payroll_payable_bank_account = value_from_employee_master
+
+			frappe.log_error(f"Employee: {i.employee} - After attempting fetch from Employee.custom_payroll_payable_account, i.custom_payroll_payable_bank_account (child table field) is now: '{i.custom_payroll_payable_bank_account}'", "Kartoza Payroll Debug")
 
 			if i.custom_payroll_payable_bank_account:
-				account = frappe.db.get_value("Bank Account", i.custom_payroll_payable_bank_account, "account")
-				if account:
-					i.custom_bank_account_currency = frappe.db.get_value("Account", account, "account_currency")
+				bank_account_exists = frappe.db.exists("Bank Account", i.custom_payroll_payable_bank_account)
+				frappe.log_error(f"Employee: {i.employee} - Does Bank Account '{i.custom_payroll_payable_bank_account}' exist? {bank_account_exists}", "Kartoza Payroll Debug")
+				if bank_account_exists:
+					account = frappe.db.get_value("Bank Account", i.custom_payroll_payable_bank_account, "account")
+					frappe.log_error(f"Employee: {i.employee} - GL Account from Bank Account: '{account}'", "Kartoza Payroll Debug")
+					if account:
+						i.custom_bank_account_currency = frappe.db.get_value("Account", account, "account_currency")
+						frappe.log_error(f"Employee: {i.employee} - GL Account Currency: '{i.custom_bank_account_currency}'", "Kartoza Payroll Debug")
+				else:
+					# If bank account name is present but doesn't exist as a record
+					frappe.log_error(f"Employee: {i.employee} - Bank Account record '{i.custom_payroll_payable_bank_account}' does not exist.", "Kartoza Payroll Debug")
+					# We might want to nullify i.custom_payroll_payable_bank_account here if an invalid name was fetched
+					# This would then trigger the frappe.throw below. For now, just logging.
 
-			if not i.custom_payroll_payable_bank_account:
+
+			if not i.custom_payroll_payable_bank_account: # This is the final check
+				frappe.log_error(f"Employee: {i.employee} - Final check FAILED. custom_payroll_payable_bank_account is still empty. Throwing error.", "Kartoza Payroll Debug")
 				frappe.throw("Payroll Payable Bank Account not found for Employee:<a href='/app/employee/{0}'><b>{0}</b></a>".format(i.employee))
 
 			if not i.custom_employee_type:

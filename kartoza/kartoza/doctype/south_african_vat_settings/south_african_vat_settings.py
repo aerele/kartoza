@@ -108,16 +108,24 @@ class SouthAfricanVATSettings(Document):
     def create_or_update_tax_template(self, template_type, account):
         """Create or update tax template for sales or purchase"""
         template_name = f"South Africa VAT {self.standard_vat_rate}% - {template_type}"
-        
-        # Use the correct doctype name based on template type
         doctype_name = f"{template_type} Taxes and Charges Template"
-        
+
+        # Ensure default_vat_report_company is set before proceeding
+        if not self.default_vat_report_company:
+            frappe.throw(
+                "Default VAT Report Company is not set in South African VAT Settings. "
+                "This is required to create or update tax templates."
+            )
+
         if frappe.db.exists(doctype_name, template_name):
             tax_template = frappe.get_doc(doctype_name, template_name)
+            # If existing template is missing a company, set it
+            if not tax_template.company:
+                tax_template.company = self.default_vat_report_company
         else:
             tax_template = frappe.new_doc(doctype_name)
             tax_template.title = template_name
-            tax_template.name = template_name
+            tax_template.name = template_name # Kartoza sets name explicitly
             tax_template.company = self.default_vat_report_company
             tax_template.is_default = 1
             

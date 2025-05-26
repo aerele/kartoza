@@ -3,12 +3,12 @@ import frappe
 def execute():
     # Check if the column 'payroll_payable_account' already exists in 'tabEmployee'
     if not frappe.db.has_column("Employee", "payroll_payable_account"):
-        # Using frappe.db.add_column to add the column.
-        # The "Data" fieldtype is suitable for storing the name of a linked document (e.g., a Bank Account name).
-        frappe.db.add_column("Employee", "payroll_payable_account", "Data")
-        frappe.log_error("Attempted to add column payroll_payable_account to tabEmployee via patch using frappe.db.add_column", "Patch: add_payroll_payable_to_employee")
-        # frappe.db.add_column handles its own commit if successful within a patch context usually,
-        # but an explicit commit can be added if issues persist.
+        # Using frappe.db.sql to add the column as frappe.db.add_column is not available.
+        # The "Data" fieldtype typically maps to VARCHAR(140).
+        frappe.db.sql("ALTER TABLE `tabEmployee` ADD COLUMN `payroll_payable_account` VARCHAR(140)")
+        frappe.log_error("Added column payroll_payable_account to tabEmployee via patch using direct SQL ALTER TABLE", "Patch: add_payroll_payable_to_employee")
+        # An explicit commit might be needed after ALTER TABLE if not automatically handled in patch context.
+        # frappe.db.commit() # Consider uncommenting if issues persist with column not being available immediately.
     else:
         frappe.log_error("Column payroll_payable_account already exists in tabEmployee (checked by patch before attempting add_column)", "Patch: add_payroll_payable_to_employee")
 
