@@ -20,12 +20,12 @@
             "read": 1
         }
     ],
-    "autoname": "format:EMP201-.{company_abbr}.-.{fiscal_year}.-.{MM}-{#####}",
+    "autoname": "EMP201-.#####",
     "naming_rule": "Expression (autoname)",
     "creation": "2024-05-06 16:00:00.000000",
     "modified": "2024-05-06 16:00:00.000000",
     "modified_by": "Administrator",
-    "title_field": "name",
+    "title_field": "company", 
     "track_changes": 1,
     "is_submittable": 1,
     "fields": [
@@ -34,8 +34,7 @@
             "label": "Company",
             "fieldtype": "Link",
             "options": "Company",
-            "reqd": 1,
-            "in_list_view": 1
+            "reqd": 1
         },
         {
             "fieldname": "company_abbr",
@@ -47,11 +46,28 @@
             "no_copy": 1
         },
         {
+            "fieldname": "name_display_section",
+            "fieldtype": "Section Break",
+            "label": "Submission ID",
+            "collapsible": 1
+        },
+        {
+            "fieldname": "name_display_html",
+            "fieldtype": "HTML",
+            "label": "Full Submission ID"
+        },
+        {
+            "fieldname": "main_details_section",
+            "fieldtype": "Section Break",
+            "label": "Details" 
+        },
+        {
             "fieldname": "fiscal_year",
             "label": "Fiscal Year",
             "fieldtype": "Link",
             "options": "Fiscal Year",
-            "reqd": 1
+            "reqd": 1,
+            "in_list_view": 1
         },
         {
             "fieldname": "month",
@@ -76,15 +92,13 @@
             "fieldname": "submission_period_start_date",
             "label": "Submission Period Start Date",
             "fieldtype": "Date",
-            "reqd": 1,
-            "read_only": 1
+            "reqd": 1
         },
         {
             "fieldname": "submission_period_end_date",
             "label": "Submission Period End Date",
             "fieldtype": "Date",
-            "reqd": 1,
-            "read_only": 1
+            "reqd": 1
         },
         {
             "fieldname": "status",

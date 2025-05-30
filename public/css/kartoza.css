@@ -1,0 +1,20 @@
+/* EMP201 Submission List View - ID Column Width */
+.frappe-list[data-doctype="EMP201 Submission"] .list-row-col[data-fieldname="name"] .list-value,
+.frappe-list[data-doctype="EMP201 Submission"] .list-header-subject .list-col[data-fieldname="name"] > div {
+    min-width: 300px !important; /* Adjust as needed, e.g., 250px, 350px */
+    max-width: 400px !important; /* Optional: prevent it from becoming excessively wide */
+    white-space: normal !important;
+    word-break: break-all !important;
+    overflow: visible !important;
+    text-overflow: clip !important;
+    font-size: var(--text-xs) !important; /* Slightly smaller font for more content */
+}
+
+/* Ensure the cell itself can expand if needed, overriding some default list view styles */
+.frappe-list[data-doctype="EMP201 Submission"] .list-row-col[data-fieldname="name"] {
+    overflow: visible !important;
+}
+
+.frappe-list[data-doctype="EMP201 Submission"] .list-header-subject .list-col[data-fieldname="name"] {
+    overflow: visible !important;
+}

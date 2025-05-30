@@ -2,6 +2,7 @@
 # For license information, please see license.txt
 
 import frappe
+from frappe import _ # Add missing import for translation
 from frappe.model.document import Document
 from frappe.utils import getdate, today, add_months, get_first_day, get_last_day, flt
 from six import string_types
@@ -30,9 +31,29 @@ class EMP201Submission(Document):
         )
 
     def validate(self):
+        frappe.log_error(
+            f"EMP201 Validate: Company='{self.company}', FiscalYear='{self.fiscal_year}', Month='{self.month}'",
+            "EMP201 Submission Debug"
+        )
+        frappe.log_error(
+            f"EMP201 Validate: Current StartDate='{self.submission_period_start_date}', EndDate='{self.submission_period_end_date}'",
+            "EMP201 Submission Debug"
+        )
         self.set_submission_period_dates()
-        if not self.name.endswith("#####"): # Check if autoname has been applied
-            self.autoname() # Call autoname if it wasn't (e.g. during direct save after create)
+        frappe.log_error(
+            f"EMP201 Validate: After set_submission_period_dates: StartDate='{self.submission_period_start_date}', EndDate='{self.submission_period_end_date}'",
+            "EMP201 Submission Debug"
+        )
+        
+        # Autoname logic should ideally run after essential fields for naming are confirmed
+        # If name is still the temporary 'new-...', try to set it.
+        # The autoname format itself uses fiscal_year and month (via MM derivation)
+        if self.name and self.name.startswith("new-emp201-submission-") and self.company and self.fiscal_year and self.month:
+             if not self.name.endswith("#####"): # Check if autoname has been applied
+                self.autoname() # Call autoname if it wasn't (e.g. during direct save after create)
+        elif not self.name: # If name is completely unset for some reason
+            if self.company and self.fiscal_year and self.month:
+                self.autoname()
 
 
     def on_submit(self):
@@ -41,8 +62,21 @@ class EMP201Submission(Document):
     def on_cancel(self):
         self.db_set("status", "Cancelled")
 
+    @frappe.whitelist() # Add whitelist decorator
     def set_submission_period_dates(self):
-        if self.fiscal_year and self.month:
+        frappe.log_error(
+            f"set_submission_period_dates called. Company='{self.company}', FiscalYear='{self.fiscal_year}', Month='{self.month}'",
+            "EMP201 Submission Debug"
+        )
+        if self.fiscal_year and self.month and self.company: # Added self.company check for robustness
+            # Ensure fiscal_year exists before trying to get_doc
+            if not frappe.db.exists("Fiscal Year", self.fiscal_year):
+                frappe.log_error(f"Fiscal Year '{self.fiscal_year}' not found in database.", "EMP201 Submission Error")
+                # Do not throw error here, let validate handle missing dates if it results in that.
+                # Or, we could frappe.throw if Fiscal Year is mandatory for this calculation to proceed.
+                # For now, it will just not set the dates, and the reqd check on dates will fail.
+                return
+
             year = int(self.fiscal_year.split("-")[0]) # Assuming fiscal year format like "2023-2024"
             month_number = {
                 "January": 1, "February": 2, "March": 3, "April": 4, "May": 5, "June": 6,
@@ -67,6 +101,12 @@ class EMP201Submission(Document):
             
             self.submission_period_start_date = get_first_day(getdate(f"{calendar_year_for_month}-{month_number}-01"))
             self.submission_period_end_date = get_last_day(getdate(f"{calendar_year_for_month}-{month_number}-01"))
+            # Return the calculated dates for client-side updates if needed
+            return {
+                "submission_period_start_date": self.submission_period_start_date,
+                "submission_period_end_date": self.submission_period_end_date
+            }
+        return None # Or return existing dates if not recalculated / inputs missing
 
     @frappe.whitelist()
     def get_previous_eti_carry_forward(self):
@@ -89,8 +129,20 @@ class EMP201Submission(Document):
 
     @frappe.whitelist()
     def fetch_emp201_data(self):
-        if not self.company or not self.submission_period_start_date or not self.submission_period_end_date:
-            frappe.throw(_("Company and Submission Period Dates are mandatory."))
+        if not self.company: # Company must be set first
+            frappe.throw(_("Company is mandatory."))
+
+        # Ensure submission period dates are set if month and fiscal_year are available
+        if self.month and self.fiscal_year and (not self.submission_period_start_date or not self.submission_period_end_date):
+            try:
+                self.set_submission_period_dates()
+            except Exception as e:
+                frappe.log_error(f"Error in set_submission_period_dates called from fetch_emp201_data: {e}", "EMP201 Submission Error")
+                frappe.throw(_("Could not calculate submission period dates. Ensure Fiscal Year and Month are correct. Error: {0}").format(e))
+        
+        # Now, re-check if dates are populated
+        if not self.submission_period_start_date or not self.submission_period_end_date:
+            frappe.throw(_("Submission Period Dates could not be determined. Ensure Fiscal Year and Month are set correctly and the document is saved or Fiscal Year exists."))
 
         self.gross_paye_before_eti = 0
         self.uif_payable = 0
@@ -109,34 +161,58 @@ class EMP201Submission(Document):
             fields=["name", "custom_monthly_eti", "employee"] # Add other fields as needed
         )
 
-        paye_component_name = frappe.db.get_single_value("Payroll Settings", "paye_salary_component")
+        frappe.log_error(f"EMP201 Data Fetch for {self.name}: Attempting to fetch component names from Payroll Settings.", "EMP201 Calculation Debug")
+
+        # Fetch and log each component name individually
+        ps_paye_field = "paye_salary_component"
+        paye_component_name = frappe.db.get_single_value("Payroll Settings", ps_paye_field)
+        frappe.log_error(f"  Fetched Payroll Settings.{ps_paye_field}: '{paye_component_name}'", "EMP201 Calculation Debug")
         if not paye_component_name:
-            paye_component_name = "Income Tax" # Fallback, should be configured
+            paye_component_name = "Income Tax" # Fallback
+            frappe.log_error(f"  Using fallback PAYE Component: {paye_component_name}", "EMP201 Calculation Debug")
+        else:
+            frappe.log_error(f"  Using PAYE Component: {paye_component_name}", "EMP201 Calculation Debug")
 
-        uif_employee_component = frappe.db.get_single_value("Payroll Settings", "uif_employee_salary_component")
-        uif_employer_component = frappe.db.get_single_value("Payroll Settings", "uif_employer_salary_component")
-        sdl_component = frappe.db.get_single_value("Payroll Settings", "sdl_salary_component")
+        ps_uif_emp_field = "uif_employee_salary_component"
+        uif_employee_component = frappe.db.get_single_value("Payroll Settings", ps_uif_emp_field)
+        frappe.log_error(f"  Fetched Payroll Settings.{ps_uif_emp_field}: '{uif_employee_component}'. Using: {uif_employee_component or 'None'}", "EMP201 Calculation Debug")
+        
+        ps_uif_empr_field = "uif_employer_salary_component"
+        uif_employer_component = frappe.db.get_single_value("Payroll Settings", ps_uif_empr_field)
+        frappe.log_error(f"  Fetched Payroll Settings.{ps_uif_empr_field}: '{uif_employer_component}'. Using: {uif_employer_component or 'None'}", "EMP201 Calculation Debug")
 
+        ps_sdl_field = "sdl_salary_component"
+        sdl_component = frappe.db.get_single_value("Payroll Settings", ps_sdl_field)
+        frappe.log_error(f"  Fetched Payroll Settings.{ps_sdl_field}: '{sdl_component}'. Using: {sdl_component or 'None'}", "EMP201 Calculation Debug")
 
         for ss_ref in salary_slips:
             ss_doc = frappe.get_doc("Salary Slip", ss_ref.name)
-            self.eti_generated_current_month += flt(ss_doc.custom_monthly_eti)
+            frappe.log_error(f"Processing Salary Slip: {ss_doc.name} for Employee: {ss_doc.employee}", "EMP201 Calculation Debug")
 
-            for earning in ss_doc.earnings:
-                pass # PAYE is a deduction
+            current_slip_eti = flt(ss_doc.get("custom_monthly_eti")) # Use .get for custom fields
+            self.eti_generated_current_month += current_slip_eti
+            frappe.log_error(f"  Adding ETI: {current_slip_eti}. Total ETI Generated: {self.eti_generated_current_month}", "EMP201 Calculation Debug")
+
+            # PAYE is a deduction, so iterate through deductions
+            # No earnings are directly summed for EMP201 main fields
 
             for deduction in ss_doc.deductions:
                 if deduction.salary_component == paye_component_name:
                     self.gross_paye_before_eti += flt(deduction.amount)
+                    frappe.log_error(f"  Adding PAYE: {flt(deduction.amount)} from component '{deduction.salary_component}'. Total Gross PAYE: {self.gross_paye_before_eti}", "EMP201 Calculation Debug")
+                
                 if deduction.salary_component == uif_employee_component:
                      self.uif_payable += flt(deduction.amount)
+                     frappe.log_error(f"  Adding Employee UIF: {flt(deduction.amount)} from component '{deduction.salary_component}'. Total UIF: {self.uif_payable}", "EMP201 Calculation Debug")
             
             for contribution in ss_doc.company_contribution:
                 if contribution.salary_component == uif_employer_component:
                     self.uif_payable += flt(contribution.amount)
+                    frappe.log_error(f"  Adding Employer UIF: {flt(contribution.amount)} from component '{contribution.salary_component}'. Total UIF: {self.uif_payable}", "EMP201 Calculation Debug")
+
                 if contribution.salary_component == sdl_component:
                     self.sdl_payable += flt(contribution.amount)
-
+                    frappe.log_error(f"  Adding SDL: {flt(contribution.amount)} from component '{contribution.salary_component}'. Total SDL: {self.sdl_payable}", "EMP201 Calculation Debug")
 
         # ETI Logic
         self.eti_carried_forward_from_previous = self.get_previous_eti_carry_forward()
@@ -151,8 +227,36 @@ class EMP201Submission(Document):
             self.net_paye_payable = self.gross_paye_before_eti - self.total_eti_available
             self.eti_to_be_carried_forward = 0
         
+        
         # Rounding (optional, but good for currency)
-        precision = frappe.get_precision("Currency", "standard_precision", self.company) or 2
+        
+        # Rounding (optional, but good for currency)
+        precision = 2 # Default precision
+        company_currency_symbol = frappe.db.get_value("Company", self.company, "default_currency")
+        if company_currency_symbol:
+            try:
+                # Get precision from the currency document's number_format
+                currency_doc = frappe.get_doc("Currency", company_currency_symbol)
+                number_format = currency_doc.number_format
+                if number_format and "." in number_format:
+                    precision = len(number_format.split(".")[-1].replace(",", "")) # Count digits after decimal, ignore thousands separators
+                elif number_format and "," in number_format and not "." in number_format : # Handle formats like #.###,## (e.g. German)
+                    precision = len(number_format.split(",")[-1].replace(".", ""))
+                else: # No decimal part in format or format is unusual
+                    precision = 0
+
+                # Ensure precision is an integer, fallback if parsing failed unexpectedly
+                precision = frappe.utils.cint(precision) # Correctly call cint
+                if precision < 0: precision = 0 # Cannot be negative
+
+            except Exception as e:
+                frappe.log_error(f"Could not determine currency precision for currency {company_currency_symbol} / company {self.company}. Error: {e}. Defaulting to 2.", "EMP201 Submission Warning")
+                precision = 2
+        else:
+            # Fallback if company or its default currency is not set
+            frappe.log_error(f"Company default currency not set for {self.company}. Defaulting precision to 2.", "EMP201 Submission Warning")
+            precision = 2
+
         self.gross_paye_before_eti = flt(self.gross_paye_before_eti, precision)
         self.uif_payable = flt(self.uif_payable, precision)
         self.sdl_payable = flt(self.sdl_payable, precision)

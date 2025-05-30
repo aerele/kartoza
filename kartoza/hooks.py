@@ -24,7 +24,7 @@ fixtures = [
 # ------------------
 
 # include js, css files in header of desk.html
-# app_include_css = "/assets/kartoza/css/kartoza.css"
+app_include_css = "/assets/kartoza/css/kartoza.css"
 # app_include_js = "/assets/kartoza/js/kartoza.js"
 
 # include js, css files in header of web template
