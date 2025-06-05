@@ -54,6 +54,14 @@ frappe.ui.form.on('IRP5 Certificate', {
 				}
 			};
 		});
+
+		frm.set_query('tax_year', function() {
+			return {
+				filters: {
+					'disabled': 0
+				}
+			};
+		});
 		
 		// Fetch employee name when employee is selected
 		frm.fields_dict['employee'].df.onchange = function() {
@@ -90,34 +98,59 @@ frappe.ui.form.on('IRP5 Certificate', {
 				frm.set_value('to_date', frappe.datetime.obj_to_str(to_date));
 			}
 		}
-		
-		set_tax_year(frm);
+		// set_tax_year(frm); // Removed as tax_year is now a Link field
 	},
 	
 	to_date: function(frm) {
-		set_tax_year(frm);
+		// set_tax_year(frm); // Removed as tax_year is now a Link field
 	},
 	
 	reconciliation_period: function(frm) {
-		// If dates are already set, update to_date based on period
-		if(frm.doc.from_date) {
+		// If tax_year is set, trigger its onchange to re-evaluate from_date and to_date
+		// based on the new reconciliation_period
+		if (frm.doc.tax_year) {
+			frm.trigger('tax_year');
+		} 
+		// If only from_date is set (and no tax_year), try to auto-calculate to_date
+		else if (frm.doc.from_date) {
 			frm.trigger('from_date');
+		}
+	},
+
+	tax_year: function(frm) {
+		if (frm.doc.tax_year) {
+			frappe.model.with_doc("Fiscal Year", frm.doc.tax_year, function() {
+				let fiscal_year_doc = frappe.get_doc("Fiscal Year", frm.doc.tax_year);
+				let from_date_val = fiscal_year_doc.year_start_date;
+				let to_date_val = fiscal_year_doc.year_end_date;
+
+				if (frm.doc.reconciliation_period === 'Interim' && fiscal_year_doc.year_start_date) {
+					let year_start_obj = frappe.datetime.str_to_obj(fiscal_year_doc.year_start_date);
+					// SARS Interim is March 1 to Aug 31.
+					// This logic assumes the fiscal year starts March 1 for Interim to make sense.
+					if (year_start_obj.getMonth() + 1 === 3 && year_start_obj.getDate() === 1) {
+						from_date_val = fiscal_year_doc.year_start_date;
+						let to_date_interim = new Date(year_start_obj.getFullYear(), 7, 31); // Aug 31
+						to_date_val = frappe.datetime.obj_to_str(to_date_interim);
+					} else {
+						// If fiscal year doesn't start March 1, Interim period might be ambiguous from Fiscal Year alone.
+						// Keep full fiscal year dates and let validation handle it, or clear them.
+						// For now, we'll stick to full fiscal year dates if not a March 1 start.
+					}
+				}
+				// For 'Final', the full fiscal year dates are usually correct for a March-Feb tax year.
+				
+				frm.set_value('from_date', from_date_val);
+				frm.set_value('to_date', to_date_val);
+				frm.refresh_fields(['from_date', 'to_date']);
+			});
+		} else {
+			frm.set_value('from_date', null);
+			frm.set_value('to_date', null);
+			frm.refresh_fields(['from_date', 'to_date']);
 		}
 	}
 });
-
-// Helper function to set tax year based on from_date and to_date
-function set_tax_year(frm) {
-	if(frm.doc.from_date && frm.doc.to_date) {
-		let from_date = frappe.datetime.str_to_obj(frm.doc.from_date);
-		let to_date = frappe.datetime.str_to_obj(frm.doc.to_date);
-		
-		let from_year = from_date.getFullYear();
-		let to_year = to_date.getFullYear();
-		
-		frm.set_value('tax_year', `${from_year}-${to_year}`);
-	}
-}
 
 // IRP5 Income Detail Child Table
 frappe.ui.form.on('IRP5 Income Detail', {

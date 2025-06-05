@@ -75,10 +75,10 @@ class IRP5Certificate(Document):
                             title=_("Invalid Tax Year"))
                 
         # Set tax year field based on dates if not already set
-        tax_year_start = from_date.year
-        tax_year_end = to_date.year
-        if not self.tax_year:
-            self.tax_year = f"{tax_year_start}-{tax_year_end}"
+        # tax_year_start = from_date.year
+        # tax_year_end = to_date.year
+        # if not self.tax_year:
+        #     self.tax_year = f"{tax_year_start}-{tax_year_end}" # This was for Data field, now it's Link
 
     def validate_employee(self):
         """Validate employee details and fetch additional information"""
@@ -110,7 +110,7 @@ class IRP5Certificate(Document):
         self.paye = 0
         self.uif = 0
         self.sdl = 0
-        self.eti = 0
+        # self.eti = 0 # ETI is calculated in calculate_eti and might be set to 0 there if disabled
         
         # Sum up deductions
         for deduction in self.deduction_details:
@@ -120,8 +120,8 @@ class IRP5Certificate(Document):
             elif deduction.deduction_code == "4141":  # UIF
                 self.uif += flt(deduction.amount)
             
-        # Calculate total payable
-        self.total_tax_payable = self.paye + self.uif + self.sdl - self.eti
+        # Calculate total payable, ETI is handled by its own calculation method
+        self.total_tax_payable = self.paye + self.uif + self.sdl - flt(self.eti) # Ensure self.eti is float
         
     @frappe.whitelist()
     def generate_certificate_data(self):
@@ -213,11 +213,11 @@ class IRP5Certificate(Document):
                 "period": self.reconciliation_period
             })
             
-        # Calculate totals
-        self.calculate_totals()
+        # Calculate ETI first as it might affect other totals or be needed by calculate_totals
+        self.calculate_eti() 
         
-        # Get ETI amount if applicable
-        self.calculate_eti()
+        # Calculate totals (which now includes ETI if calculated)
+        self.calculate_totals()
         
         return {"income_count": len(income_map), "deduction_count": len(deduction_map)}
         
@@ -290,12 +290,20 @@ class IRP5Certificate(Document):
         
     def calculate_eti(self):
         """Calculate Employment Tax Incentive amount"""
+        # Check global ETI disable setting
+        disable_eti_globally = frappe.db.get_single_value("Payroll Settings", "custom_disable_eti_calculation")
+        if disable_eti_globally:
+            self.eti = 0
+            frappe.log_info(f"ETI calculation globally disabled. IRP5: {self.name}", "ETI Calculation")
+            return 
+
         # Check if ETI is applicable
         # Must be between 18-29 years old or in a special economic zone
         employee = frappe.get_doc("Employee", self.employee)
         
         # Skip if no date of birth
         if not employee.date_of_birth:
+            self.eti = 0 # Ensure ETI is zero if not applicable
             return
             
         # Calculate employee age at the end of the tax year
@@ -312,6 +320,7 @@ class IRP5Certificate(Document):
             # Check if special economic zone exemption applies
             # This would require custom fields on Employee
             if not frappe.db.get_value("Employee", employee.name, "custom_special_economic_zone"):
+                self.eti = 0 # Ensure ETI is zero if not applicable
                 return
                 
         # Check employment history
@@ -320,6 +329,7 @@ class IRP5Certificate(Document):
         # Must be employed on or after 1 October 2013
         eti_start_date = getdate("2013-10-01")
         if date_of_joining < eti_start_date:
+            self.eti = 0 # Ensure ETI is zero if not applicable
             return
             
         # Calculate months of employment
@@ -329,30 +339,31 @@ class IRP5Certificate(Document):
             
         # ETI only applies for the first 24 months of employment
         if employment_months > 24:
+            self.eti = 0 # Ensure ETI is zero if not applicable
             return
             
         # Find total remuneration for the period
-        total_income = sum(d.amount for d in self.income_details if d.income_code in ["3601", "3602", "3603"])
+        total_income = sum(d.amount for d in self.income_details if d.income_code in ["3601", "3602", "3603"]) # Assuming these are relevant income codes for ETI base
         
         # Monthly average remuneration
         months_in_period = 0
-        from_date = getdate(self.from_date)
-        to_date = getdate(self.to_date)
+        temp_from_date = getdate(self.from_date) # Use a temporary variable for loop
         
-        while from_date <= to_date:
+        while temp_from_date <= end_date: # Use end_date consistently
             months_in_period += 1
-            from_date = get_first_day(add_months(from_date, 1))
+            temp_from_date = get_first_day(add_months(temp_from_date, 1))
             
         if months_in_period == 0:
+            self.eti = 0 # Ensure ETI is zero if not applicable
             return
             
         monthly_remuneration = total_income / months_in_period
         
         # Calculate ETI based on monthly remuneration and employment period
-        eti_amount = self.calculate_eti_amount(monthly_remuneration, employment_months <= 12)
+        eti_amount_per_month = self.calculate_eti_amount(monthly_remuneration, employment_months <= 12)
         
         # Multiply by months in period
-        self.eti = eti_amount * months_in_period
+        self.eti = eti_amount_per_month * months_in_period
         
     def calculate_eti_amount(self, monthly_remuneration, first_12_months):
         """

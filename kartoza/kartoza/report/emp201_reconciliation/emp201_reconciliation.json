@@ -1,0 +1,26 @@
+ {
+ "doctype": "Report",
+ "name": "EMP201 Reconciliation",
+ "report_name": "EMP201 Reconciliation",
+ "report_type": "Script Report",
+ "is_standard": "Yes",
+ "module": "Kartoza",
+ "reference_doctype": "EMP201 Submission",
+ "filters": [
+  {
+   "fieldname": "emp201_submission",
+   "label": "EMP201 Submission",
+   "fieldtype": "Link",
+   "options": "EMP201 Submission",
+   "reqd": 1,
+   "description": "Select the EMP201 Submission to generate the reconciliation report for."
+  },
+  {
+   "fieldname": "company",
+   "label": "Company",
+   "fieldtype": "Link",
+   "options": "Company",
+   "default": "frappe.defaults.get_user_default('company')"
+  }
+ ]
+}

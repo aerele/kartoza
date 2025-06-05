@@ -39,6 +39,41 @@ class EMP201Submission(Document):
             f"EMP201 Validate: Current StartDate='{self.submission_period_start_date}', EndDate='{self.submission_period_end_date}'",
             "EMP201 Submission Debug"
         )
+        
+        # --- BEGIN DUPLICATE CHECK ---
+        # Ensure company, fiscal_year, and month are set before checking for duplicates
+        if self.company and self.fiscal_year and self.month:
+            name_to_exclude = ""
+            if self.is_new():
+                # For a new document, generate a random hash. This ensures that the duplicate check,
+                # which excludes documents by name, correctly identifies other conflicting documents,
+                # as self.name might be temporary or not yet uniquely assigned by autoname.
+                name_to_exclude = frappe.generate_hash(length=12)
+            else:
+                # For an existing document, self.name is its actual, unique name.
+                name_to_exclude = self.name
+            
+            existing_submission = frappe.db.exists(
+                "EMP201 Submission",
+                {
+                    "company": self.company,
+                    "fiscal_year": self.fiscal_year,
+                    "month": self.month,
+                    "name": ["!=", name_to_exclude],
+                    "docstatus": ["!=", 2],  # Not Cancelled (0 = Draft, 1 = Submitted)
+                },
+            )
+
+            if existing_submission:
+                frappe.throw(
+                    _("An active EMP201 Submission for company '{0}', fiscal year '{1}', and month '{2}' already exists: {3}. Please cancel or delete the existing submission before creating a new one for the same period.").format(
+                        self.company, self.fiscal_year, self.month, frappe.utils.get_link_to_form("EMP201 Submission", existing_submission)
+                    ),
+                    title=_("Duplicate Submission Period"),
+                    exc=frappe.DuplicateEntryError,
+                )
+        # --- END DUPLICATE CHECK ---
+
         self.set_submission_period_dates()
         frappe.log_error(
             f"EMP201 Validate: After set_submission_period_dates: StartDate='{self.submission_period_start_date}', EndDate='{self.submission_period_end_date}'",
@@ -48,12 +83,15 @@ class EMP201Submission(Document):
         # Autoname logic should ideally run after essential fields for naming are confirmed
         # If name is still the temporary 'new-...', try to set it.
         # The autoname format itself uses fiscal_year and month (via MM derivation)
-        if self.name and self.name.startswith("new-emp201-submission-") and self.company and self.fiscal_year and self.month:
-             if not self.name.endswith("#####"): # Check if autoname has been applied
-                self.autoname() # Call autoname if it wasn't (e.g. during direct save after create)
-        elif not self.name: # If name is completely unset for some reason
-            if self.company and self.fiscal_year and self.month:
-                self.autoname()
+        # Rely on Frappe's standard doc.insert() to call autoname for new documents.
+        # Explicitly calling autoname in validate can sometimes lead to issues if validate is called multiple times
+        # or if the naming series relies on data not yet available/committed during all validate calls.
+        # if self.name and self.name.startswith("new-emp201-submission-") and self.company and self.fiscal_year and self.month:
+        #      if not self.name.endswith("#####"): # Check if autoname has been applied
+        #         self.autoname() # Call autoname if it wasn't (e.g. during direct save after create)
+        # elif not self.name: # If name is completely unset for some reason
+        #     if self.company and self.fiscal_year and self.month:
+        #         self.autoname()
 
 
     def on_submit(self):

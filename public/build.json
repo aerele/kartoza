@@ -1,0 +1,5 @@
+{
+    "kartoza.bundle.css": [
+        "public/css/kartoza.css"
+    ]
+}
