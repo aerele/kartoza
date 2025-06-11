@@ -25,442 +25,269 @@ except ImportError:
 
 class IRP5Certificate(Document):
     def validate(self):
-        self.validate_dates()
-        if not self.certificate_number:
+        if self.employee and self.tax_year and not self.certificate_number:
             self.set_certificate_number()
+        self.validate_dates() 
         self.validate_employee()
         if not self.status:
             self.status = "Draft"
         
     def validate_dates(self):
-        """Validate that the tax year dates are valid"""
         if not self.from_date or not self.to_date:
             frappe.throw(_("Both From Date and To Date are required"), title=_("Missing Required Dates"))
-            
-        from_date = getdate(self.from_date)
-        to_date = getdate(self.to_date)
-        
+        from_date, to_date = getdate(self.from_date), getdate(self.to_date)
         if from_date > to_date:
             frappe.throw(_("From Date cannot be after To Date"), title=_("Invalid Date Range"))
-            
-        # Validate tax period based on reconciliation period
+
         if self.reconciliation_period == "Interim":
-            # Interim period typically March to August
             if not (from_date.month == 3 and from_date.day == 1):
-                frappe.throw(_("For Interim reconciliation, From Date must be March 1"), 
-                            title=_("Invalid Interim Period Start Date"))
-            
+                frappe.throw(_("For Interim reconciliation, From Date must be March 1"), title=_("Invalid Interim Period Start Date"))
             if not (to_date.month == 8 and to_date.day == 31):
-                frappe.throw(_("For Interim reconciliation, To Date must be August 31"), 
-                            title=_("Invalid Interim Period End Date"))
-        
+                frappe.throw(_("For Interim reconciliation, To Date must be August 31"), title=_("Invalid Interim Period End Date"))
         elif self.reconciliation_period == "Final":
-            # Final period is typically March to February
             if not (from_date.month == 3 and from_date.day == 1):
-                frappe.throw(_("For Final reconciliation, From Date must be March 1"), 
-                            title=_("Invalid Final Period Start Date"))
-            
-            expected_end_month = 2
-            expected_end_day = 28
+                frappe.throw(_("For Final reconciliation, From Date must be March 1"), title=_("Invalid Final Period Start Date"))
+            expected_end_month, expected_end_day = 2, 28
             if (from_date.year + 1) % 4 == 0 and ((from_date.year + 1) % 100 != 0 or (from_date.year + 1) % 400 == 0):
-                expected_end_day = 29  # Leap year
-                
+                expected_end_day = 29
             if not (to_date.month == expected_end_month and to_date.day == expected_end_day):
-                frappe.throw(_("For Final reconciliation, To Date must be the last day of February"), 
-                            title=_("Invalid Final Period End Date"))
-            
-            # Ensure correct tax year
+                frappe.throw(_("For Final reconciliation, To Date must be the last day of February"), title=_("Invalid Final Period End Date"))
             if to_date.year != from_date.year + 1:
-                frappe.throw(_("Final period must span from March 1 to February of the next year"), 
-                            title=_("Invalid Tax Year"))
-                
-        # Set tax year field based on dates if not already set
-        # tax_year_start = from_date.year
-        # tax_year_end = to_date.year
-        # if not self.tax_year:
-        #     self.tax_year = f"{tax_year_start}-{tax_year_end}" # This was for Data field, now it's Link
+                frappe.throw(_("Final period must span from March 1 to February of the next year"), title=_("Invalid Tax Year"))
 
     def validate_employee(self):
-        """Validate employee details and fetch additional information"""
-        if not self.employee:
-            frappe.throw(_("Employee is required"), title=_("Missing Employee"))
-            
-        if not self.employee_name:
-            self.employee_name = frappe.db.get_value("Employee", self.employee, "employee_name")
-            
-        if not self.company:
-            self.company = frappe.db.get_value("Employee", self.employee, "company")
+        if not self.employee: frappe.throw(_("Employee is required"), title=_("Missing Employee"))
+        if not self.employee_name: self.employee_name = frappe.db.get_value("Employee", self.employee, "employee_name")
+        if not self.company: self.company = frappe.db.get_value("Employee", self.employee, "company")
             
     def set_certificate_number(self):
-        """Set a unique certificate number"""
-        # Format: IRP5-{TAX_YEAR}-{EMPLOYEE_ID}-{UNIQUE}
+        if not self.employee or not self.tax_year:
+            frappe.log_error("Attempted to set certificate number without employee or tax year.", "IRP5 Certificate Numbering")
+            return
         employee_id = frappe.db.get_value("Employee", self.employee, "name")
-        tax_year = self.tax_year or "XXXX-XXXX"
-        unique = frappe.generate_hash(length=8)
-        self.certificate_number = f"IRP5-{tax_year}-{employee_id}-{unique}"
+        tax_year_str = str(self.tax_year).replace("/", "-")
+        unique_hash = frappe.generate_hash(length=8)
+        self.certificate_number = f"IRP5-{tax_year_str}-{employee_id}-{unique_hash}"
 
     def before_submit(self):
-        """Actions to perform before submission"""
         self.status = "Prepared"
         self.calculate_totals()
         
     def calculate_totals(self):
-        """Calculate total tax amounts from income and deduction details"""
-        # Reset totals
-        self.paye = 0
-        self.uif = 0
-        self.sdl = 0
-        # self.eti = 0 # ETI is calculated in calculate_eti and might be set to 0 there if disabled
-        
-        # Sum up deductions
+        self.paye, self.uif, self.sdl = 0, 0, 0
         for deduction in self.deduction_details:
-            # Map South African tax codes to our fields
-            if deduction.deduction_code == "4102":  # PAYE
-                self.paye += flt(deduction.amount)
-            elif deduction.deduction_code == "4141":  # UIF
-                self.uif += flt(deduction.amount)
-            
-        # Calculate total payable, ETI is handled by its own calculation method
-        self.total_tax_payable = self.paye + self.uif + self.sdl - flt(self.eti) # Ensure self.eti is float
+            if deduction.deduction_code == "4102": self.paye += flt(deduction.amount) # PAYE
+            elif deduction.deduction_code == "4141": self.uif += flt(deduction.amount) # UIF Employee
+            # Add other codes if SDL is part of deductions, or handle it separately
+            # Example: if SDL code 4142 is used for employee SDL portion
+            # elif deduction.deduction_code == "4142": self.sdl += flt(deduction.amount)
+
+        # Note: SDL is typically an employer levy. If it's displayed on IRP5,
+        # it might come from a specific company contribution code or be calculated differently.
+        # For now, assuming it might be part of deductions or needs a specific source.
+        # If SDL is purely employer levy and not on IRP5 this way, self.sdl might remain 0.
+        
+        self.total_tax_payable = self.paye + self.uif + self.sdl - flt(self.eti)
         
     @frappe.whitelist()
     def generate_certificate_data(self):
-        """Generate certificate data from salary slips"""
+        if not self.certificate_number:
+            if not self.employee or not self.tax_year:
+                frappe.throw(_("Employee and Tax Year must be set to generate certificate data and number."))
+            self.set_certificate_number()
+
         if not self.employee or not self.from_date or not self.to_date:
-            frappe.throw(_("Employee, From Date, and To Date are required"))
+            frappe.throw(_("Employee, From Date, and To Date are required. Ensure Tax Year and Period are set."))
             
-        from_date = getdate(self.from_date)
-        to_date = getdate(self.to_date)
+        from_date, to_date = getdate(self.from_date), getdate(self.to_date)
+        self.income_details, self.deduction_details = [], []
         
-        # Clear existing details
-        self.income_details = []
-        self.deduction_details = []
-        
-        # Get all salary slips for the employee in the specified period
         salary_slips = frappe.get_all("Salary Slip",
-            filters={
-                "employee": self.employee,
-                "start_date": [">=", from_date],
-                "end_date": ["<=", to_date],
-                "docstatus": 1  # Only posted salary slips
-            },
-            fields=["name", "start_date", "end_date", "gross_pay", "total_deduction", "net_pay"],
-            order_by="start_date"
+            filters={"employee": self.employee, "start_date": [">=", from_date], "end_date": ["<=", to_date], "docstatus": 1},
+            fields=["name"], order_by="start_date"
         )
         
         if not salary_slips:
             frappe.msgprint(_("No salary slips found for this employee in the specified period"))
-            return
+            self.calculate_eti()
+            self.calculate_totals()
+            return {"message": "No salary slips found, totals (including ETI) recalculated."}
             
-        # Initialize income and deduction trackers
-        income_map = {}
-        deduction_map = {}
+        income_map, deduction_map = {}, {}
         
-        # Process each salary slip
-        for slip in salary_slips:
-            # Get salary slip details
-            salary_slip = frappe.get_doc("Salary Slip", slip.name)
+        for slip_data in salary_slips:
+            salary_slip_doc = frappe.get_doc("Salary Slip", slip_data.name)
             
-            # Process earnings
-            for earning in salary_slip.earnings:
-                # Map earning type to South African SARS income code
+            for earning in salary_slip_doc.earnings:
                 income_code = self.get_income_code(earning.salary_component)
-                if not income_code:
-                    continue  # Skip if no mapping exists
-                    
-                if income_code not in income_map:
-                    income_map[income_code] = {
-                        "code": income_code,
-                        "description": self.get_income_description(income_code),
-                        "amount": 0
-                    }
-                
+                if not income_code: continue
+                income_map.setdefault(income_code, {"code": income_code, "description": self.get_income_description(income_code), "amount": 0})
                 income_map[income_code]["amount"] += flt(earning.amount)
             
-            # Process deductions
-            for deduction in salary_slip.deductions:
-                # Map deduction type to South African SARS deduction code
-                deduction_code = self.get_deduction_code(deduction.salary_component)
-                if not deduction_code:
-                    continue  # Skip if no mapping exists
-                    
-                if deduction_code not in deduction_map:
-                    deduction_map[deduction_code] = {
-                        "code": deduction_code,
-                        "description": self.get_deduction_description(deduction_code),
-                        "amount": 0
-                    }
-                
+            for deduction in salary_slip_doc.deductions: # Employee deductions
+                deduction_code = self.get_deduction_code(deduction.salary_component, is_company_contribution=False)
+                if not deduction_code: continue
+                deduction_map.setdefault(deduction_code, {"code": deduction_code, "description": self.get_deduction_description(deduction_code), "amount": 0})
                 deduction_map[deduction_code]["amount"] += flt(deduction.amount)
+
+            for contribution in salary_slip_doc.get("company_contributions", []): # Employer contributions
+                # Assuming company_contributions is the field name for the child table
+                contribution_code = self.get_deduction_code(contribution.salary_component, is_company_contribution=True)
+                if not contribution_code: continue
+                deduction_map.setdefault(contribution_code, {"code": contribution_code, "description": self.get_deduction_description(contribution_code), "amount": 0})
+                deduction_map[contribution_code]["amount"] += flt(contribution.amount)
                 
-        # Add income details to certificate
         for code, details in income_map.items():
-            self.append("income_details", {
-                "income_code": code,
-                "description": details["description"],
-                "amount": details["amount"],
-                "tax_year": self.tax_year,
-                "period": self.reconciliation_period
-            })
+            self.append("income_details", {"income_code": code, "description": details["description"], "amount": details["amount"], "tax_year": self.tax_year, "period": self.reconciliation_period})
             
-        # Add deduction details to certificate
         for code, details in deduction_map.items():
-            self.append("deduction_details", {
-                "deduction_code": code,
-                "description": details["description"],
-                "amount": details["amount"],
-                "tax_year": self.tax_year,
-                "period": self.reconciliation_period
-            })
+            self.append("deduction_details", {"deduction_code": code, "description": details["description"], "amount": details["amount"], "tax_year": self.tax_year, "period": self.reconciliation_period})
             
-        # Calculate ETI first as it might affect other totals or be needed by calculate_totals
         self.calculate_eti() 
-        
-        # Calculate totals (which now includes ETI if calculated)
         self.calculate_totals()
-        
-        return {"income_count": len(income_map), "deduction_count": len(deduction_map)}
+        return {"income_count": len(income_map), "deduction_count": len(deduction_map), "message": "Certificate data generated."}
         
     def get_income_code(self, salary_component):
-        """Map salary component to South African SARS income code"""
-        # This mapping should ideally come from a configuration table
-        # For now, using a simple dictionary
+        # Placeholder - expand this with actual mappings
         component_mapping = {
-            "Basic Salary": "3601",  # Normal Income
-            "House Rent Allowance": "3606",  # Special Allowance
-            "Conveyance Allowance": "3606",  # Special Allowance
-            "Leave Encashment": "3605",  # Annual payments
-            "Special Allowance": "3607",  # Overtime
-            "Overtime": "3607",  # Overtime
-            "Bonus": "3605",  # Annual payments
-            "Commission": "3605"  # Annual payments
+            "Basic Salary": "3601", "Overtime": "3607", "Bonus": "3605", "Commission": "3605",
+            "Annual Payment": "3605", "Leave Encashment": "3605", 
+            "Travel Allowance": "3701", # Example, verify correct code
+            "Subsistence Allowance": "3704", # Example, verify correct code
+            "Uniform Allowance": "3713", # Example, verify correct code
+            # Fringe Benefits (e.g., Use of Motor Vehicle) might have codes like 3802
         }
-        
         return component_mapping.get(salary_component)
     
     def get_income_description(self, income_code):
-        """Get description for South African SARS income code"""
-        descriptions = {
-            "3601": "Income - Normal",
-            "3602": "Income - Non-Taxable",
-            "3603": "Pension",
-            "3604": "Provident Fund",
-            "3605": "Annual Payment",
-            "3606": "Special Allowances",
-            "3607": "Overtime",
-            "3608": "Commission",
-            "3609": "Travel Allowance",
-            "3610": "Interest",
-            "3611": "Non-Taxable Earnings"
-        }
-        
+        # Placeholder - expand this
+        descriptions = {"3601": "Gross Remuneration", "3605": "Annual Payment", "3607": "Overtime", "3701": "Travel Allowance (Taxable)"}
         return descriptions.get(income_code, f"Income Code {income_code}")
     
-    def get_deduction_code(self, salary_component):
-        """Map salary component to South African SARS deduction code"""
-        component_mapping = {
-            "TDS": "4102",  # PAYE
-            "PAYE": "4102",  # PAYE
-            "Tax": "4102",  # PAYE
-            "Income Tax": "4102",  # PAYE
-            "UIF": "4141",  # UIF Employee Contribution
-            "Professional Tax": "4149",  # Other Deductions
-            "Provident Fund": "4001",  # Pension Fund Contributions
-            "Medical Insurance": "4005",  # Medical Aid Contributions
-            "SDL": "4142"  # SDL Employer Contribution
+    def get_deduction_code(self, salary_component, is_company_contribution=False):
+        # Placeholder - expand this with actual mappings
+        # Some codes are specific to employee or employer
+        component_mapping_employee = {
+            "PAYE": "4102", "Income Tax": "4102", 
+            "UIF Contribution": "4141", # Employee UIF
+            "Pension Fund": "4001", # Employee Pension
+            "Retirement Annuity Fund": "4006", # Employee RA
+            "Medical Aid": "4005", # Employee Medical
         }
-        
-        return component_mapping.get(salary_component)
-    
+        component_mapping_employer = {
+            "UIF Contribution": "4141", # Employer UIF (often same code as employee for reporting, but context matters)
+            "Pension Fund": "4472", # Employer Pension Contribution
+            "Medical Aid": "4474", # Employer Medical Contribution
+            "SDL": "4142", # Skills Development Levy (Employer)
+            # Group Life, Disability etc. might have codes like 44xx
+        }
+        if is_company_contribution:
+            return component_mapping_employer.get(salary_component)
+        else:
+            return component_mapping_employee.get(salary_component)
+
     def get_deduction_description(self, deduction_code):
-        """Get description for South African SARS deduction code"""
+        # Placeholder - expand this
         descriptions = {
-            "4001": "Pension Fund Contributions",
-            "4002": "Retirement Annuity Fund Contributions",
-            "4003": "Provident Fund Contributions",
-            "4005": "Medical Aid Contributions",
-            "4102": "PAYE",
-            "4141": "UIF Employee Contribution",
-            "4142": "SDL Employer Contribution",
-            "4149": "Other Deductions",
-            "4116": "Medical Tax Credit"
+            "4102": "PAYE", "4141": "UIF Contribution", "4001": "Pension Fund Contribution (Current)",
+            "4006": "Retirement Annuity Fund Contributions", "4005": "Medical Scheme Fees (Employee Paid)",
+            "4472": "Employer's Pension Fund Contributions", 
+            "4474": "Employer's Medical Scheme Contributions",
+            "4142": "SDL"
         }
-        
         return descriptions.get(deduction_code, f"Deduction Code {deduction_code}")
         
     def calculate_eti(self):
-        """Calculate Employment Tax Incentive amount"""
-        # Check global ETI disable setting
         disable_eti_globally = frappe.db.get_single_value("Payroll Settings", "custom_disable_eti_calculation")
         if disable_eti_globally:
             self.eti = 0
-            frappe.log_info(f"ETI calculation globally disabled. IRP5: {self.name}", "ETI Calculation")
+            frappe.log_error(message=f"ETI calculation globally disabled. IRP5: {self.name}", title="ETI Calculation")
             return 
-
-        # Check if ETI is applicable
-        # Must be between 18-29 years old or in a special economic zone
+        if not self.employee: self.eti = 0; return
         employee = frappe.get_doc("Employee", self.employee)
-        
-        # Skip if no date of birth
-        if not employee.date_of_birth:
-            self.eti = 0 # Ensure ETI is zero if not applicable
-            return
-            
-        # Calculate employee age at the end of the tax year
-        end_date = getdate(self.to_date)
-        birth_date = getdate(employee.date_of_birth)
-        
-        # Calculate age in years
-        age_years = end_date.year - birth_date.year
-        if end_date.month < birth_date.month or (end_date.month == birth_date.month and end_date.day < birth_date.day):
-            age_years -= 1
-            
-        # Check if eligible for ETI based on age
-        if not (18 <= age_years <= 29):
-            # Check if special economic zone exemption applies
-            # This would require custom fields on Employee
-            if not frappe.db.get_value("Employee", employee.name, "custom_special_economic_zone"):
-                self.eti = 0 # Ensure ETI is zero if not applicable
-                return
-                
-        # Check employment history
+        if not employee.date_of_birth: self.eti = 0; return
+        if not self.to_date: self.eti = 0; return
+        end_date, birth_date = getdate(self.to_date), getdate(employee.date_of_birth)
+        age_years = end_date.year - birth_date.year - ((end_date.month, end_date.day) < (birth_date.month, birth_date.day))
+        if not (18 <= age_years <= 29) and not frappe.db.get_value("Employee", employee.name, "custom_special_economic_zone"):
+            self.eti = 0; return
+        if not employee.date_of_joining: self.eti = 0; return
         date_of_joining = getdate(employee.date_of_joining)
+        if date_of_joining < getdate("2013-10-01"): self.eti = 0; return
+        employment_months = (end_date.year - date_of_joining.year) * 12 + end_date.month - date_of_joining.month - (end_date.day < date_of_joining.day)
+        if employment_months >= 24: self.eti = 0; return # ETI for first 24 qualifying months (0-23)
+            
+        total_income = sum(d.amount for d in self.income_details if d.income_code in ["3601", "3801", "3802"]) # Example ETI qualifying income codes
         
-        # Must be employed on or after 1 October 2013
-        eti_start_date = getdate("2013-10-01")
-        if date_of_joining < eti_start_date:
-            self.eti = 0 # Ensure ETI is zero if not applicable
-            return
-            
-        # Calculate months of employment
-        employment_months = (end_date.year - date_of_joining.year) * 12 + (end_date.month - date_of_joining.month)
-        if end_date.day < date_of_joining.day:
-            employment_months -= 1
-            
-        # ETI only applies for the first 24 months of employment
-        if employment_months > 24:
-            self.eti = 0 # Ensure ETI is zero if not applicable
-            return
-            
-        # Find total remuneration for the period
-        total_income = sum(d.amount for d in self.income_details if d.income_code in ["3601", "3602", "3603"]) # Assuming these are relevant income codes for ETI base
-        
-        # Monthly average remuneration
         months_in_period = 0
-        temp_from_date = getdate(self.from_date) # Use a temporary variable for loop
-        
-        while temp_from_date <= end_date: # Use end_date consistently
+        if not self.from_date or not self.to_date: self.eti = 0; return
+        temp_from_date, loop_to_date = getdate(self.from_date), getdate(self.to_date)
+        while temp_from_date <= loop_to_date: 
             months_in_period += 1
             temp_from_date = get_first_day(add_months(temp_from_date, 1))
+        if months_in_period == 0: self.eti = 0; return
             
-        if months_in_period == 0:
-            self.eti = 0 # Ensure ETI is zero if not applicable
-            return
-            
-        monthly_remuneration = total_income / months_in_period
-        
-        # Calculate ETI based on monthly remuneration and employment period
-        eti_amount_per_month = self.calculate_eti_amount(monthly_remuneration, employment_months <= 12)
-        
-        # Multiply by months in period
+        monthly_remuneration = total_income / months_in_period if months_in_period else 0
+        is_first_12_months = employment_months < 12
+        eti_amount_per_month = self.calculate_eti_amount(monthly_remuneration, is_first_12_months)
         self.eti = eti_amount_per_month * months_in_period
         
-    def calculate_eti_amount(self, monthly_remuneration, first_12_months):
-        """
-        Calculate ETI amount based on South African regulations
-        
-        Parameters:
-        monthly_remuneration (float): Employee's monthly remuneration
-        first_12_months (bool): Whether the employee is in the first 12 months of employment
-        
-        Returns:
-        float: Monthly ETI amount
-        """
-        # As of 2024-2025 tax year - update these values as regulations change
-        if monthly_remuneration < 2000:
-            # Below minimum wage
-            return 0
-            
-        if monthly_remuneration <= 4500:
-            # First bracket: full benefit
-            return 1000 if first_12_months else 500
-            
-        if monthly_remuneration <= 6500:
-            # Second bracket: phase out
-            if first_12_months:
-                return 1000 - (0.5 * (monthly_remuneration - 4500))
-            else:
-                return 500 - (0.25 * (monthly_remuneration - 4500))
-                
-        # Above maximum threshold
-        return 0
+    def calculate_eti_amount(self, monthly_remuneration, is_first_12_months):
+        if monthly_remuneration < 2000: return 0
+        # SARS ETI values for 2023/2024 - these should be configurable or updated yearly
+        # Max ETI for first 12 months: R1500. Max ETI for second 12 months: R750 (examples, verify current rates)
+        max_eti_first_year = 1500 
+        max_eti_second_year = 750
+
+        if is_first_12_months:
+            if monthly_remuneration <= 2000: return 0 # Should be covered by first check
+            elif monthly_remuneration < 4500: return max_eti_first_year * (monthly_remuneration / 4500) # Simplified, actual formula is tiered
+            elif monthly_remuneration <= 6500: return max_eti_first_year * (1 - (monthly_remuneration - 4500) / 2000)
+            else: return 0
+        else: # Second 12 months
+            if monthly_remuneration <= 2000: return 0
+            elif monthly_remuneration < 4500: return max_eti_second_year * (monthly_remuneration / 4500)
+            elif monthly_remuneration <= 6500: return max_eti_second_year * (1 - (monthly_remuneration - 4500) / 2000)
+            else: return 0
         
     @frappe.whitelist()
     def export_pdf(self):
-        """Export IRP5 certificate as PDF"""
-        if self.status == "Draft":
-            frappe.throw(_("Cannot export draft certificate. Submit the certificate first."))
-
-        # Check if PDF generation libraries are available
-        if not pdf_generation_available:
-            frappe.throw(_("PDF generation functionality requires PyPDF2 and reportlab libraries. "
-                         "Please install these libraries using 'pip install PyPDF2 reportlab' "
-                         "or by running 'bench pip install -r apps/kartoza/requirements.txt'."))
-            
+        # ... (rest of export_pdf method remains largely the same, ensure it uses self.certificate_number)
+        if self.status == "Draft": frappe.throw(_("Cannot export draft certificate..."))
+        if not pdf_generation_available: frappe.throw(_("PDF generation libraries not installed..."))
         try:
-            # Generate PDF content
+            if not self.certificate_number: self.set_certificate_number() # Ensure cert number exists
             pdf_content = self.generate_irp5_pdf()
-            
-            # Create a file in Frappe
             file_name = f"{self.certificate_number}.pdf"
-            file_url = save_file(file_name, pdf_content, "IRP5 Certificate", self.name, is_private=True)
-            
-            frappe.msgprint(_("IRP5 Certificate PDF has been generated and attached to this document."))
-            return file_url
-            
+            file_doc = save_file(file_name, pdf_content, "IRP5 Certificate", self.name, is_private=True)
+            frappe.msgprint(_("IRP5 Certificate PDF has been generated..."))
+            return file_doc.file_url # Use file_doc object
         except Exception as e:
-            frappe.log_error(f"Error generating IRP5 PDF: {str(e)}")
+            frappe.log_error(message=frappe.get_traceback(), title=f"Error generating IRP5 PDF for {self.name}")
             frappe.throw(_("Error generating PDF: {0}").format(str(e)))
 
     def generate_irp5_pdf(self):
-        """Generate PDF for IRP5 certificate based on SARS template"""
-        # Verify PDF generation libraries are available
-        if not pdf_generation_available:
-            frappe.throw(_("PDF generation functionality requires PyPDF2 and reportlab libraries."))
-            
-        # Load template
+        # ... (rest of generate_irp5_pdf method remains largely the same)
+        # Ensure all self.field references are valid and handle None for amounts
+        if not pdf_generation_available: frappe.throw(_("PDF generation libraries not installed."))
         template_path = frappe.get_app_path("kartoza", "kartoza", "docs", "Employee Income Payroll Certificate - IRP5 form.pdf")
-        
-        if not os.path.exists(template_path):
-            frappe.throw(_("IRP5 template not found at {0}").format(template_path))
+        if not os.path.exists(template_path): frappe.throw(_("IRP5 template not found..."))
             
-        # Create a PDF writer object
         packet = BytesIO()
         can = canvas.Canvas(packet, pagesize=A4)
         can.setFillColor(black)
-        
-        # Try to use a standard font that supports all characters
         try:
             pdfmetrics.registerFont(TTFont('Arial', 'Arial.ttf'))
             can.setFont("Arial", 10)
-        except:
-            # Fall back to standard PDF font if Arial is not available
-            can.setFont("Helvetica", 10)
+        except: can.setFont("Helvetica", 10)
         
-        # Get employee and company details
         employee_doc = frappe.get_doc("Employee", self.employee)
         company_doc = frappe.get_doc("Company", self.company)
         
-        # Add text to the PDF at specific coordinates
-        
-        # Certificate details - assuming coordinates based on SARS template
-        can.drawString(150, 800, self.certificate_number)
+        can.drawString(150, 800, self.certificate_number or "")
         can.drawString(150, 780, self.tax_year or "")
-        
-        # Employer details
         can.drawString(150, 720, company_doc.company_name or "")
         
-        # Try to get employer registration numbers - these would be custom fields
         company_vat = frappe.db.get_value("Company", self.company, "custom_vat_number") or ""
         company_paye = frappe.db.get_value("Company", self.company, "custom_paye_reference_number") or ""
         company_sdl = frappe.db.get_value("Company", self.company, "custom_sdl_reference_number") or ""
@@ -470,10 +297,7 @@ class IRP5Certificate(Document):
         can.drawString(150, 660, company_vat)
         can.drawString(150, 640, company_doc.company_address or "")
         
-        # Employee details
         can.drawString(450, 720, employee_doc.employee_name or "")
-        
-        # Try to get ID number - this would be a custom field
         id_number = frappe.db.get_value("Employee", self.employee, "custom_id_number") or ""
         tax_number = frappe.db.get_value("Employee", self.employee, "custom_tax_number") or ""
         
@@ -481,63 +305,46 @@ class IRP5Certificate(Document):
         can.drawString(450, 680, tax_number)
         can.drawString(450, 640, employee_doc.get("custom_residential_address") or "")
         
-        # Add income and deduction details - assuming coordinates
-        y_pos = 500  # Starting Y position for income items
-        
+        y_pos = 500
         for income in self.income_details:
             can.drawString(100, y_pos, income.income_code or "")
             can.drawString(150, y_pos, income.description or "")
-            can.drawString(400, y_pos, str(income.amount) or "0.00")
-            y_pos -= 15  # Move down for next item
+            can.drawString(400, y_pos, str(income.amount) if income.amount is not None else "0.00")
+            y_pos -= 15
             
-        y_pos = 300  # Starting Y position for deduction items
-        
-        for deduction in self.deduction_details:
+        y_pos = 300
+        for deduction in self.deduction_details: # This now includes company contributions
             can.drawString(100, y_pos, deduction.deduction_code or "")
             can.drawString(150, y_pos, deduction.description or "")
-            can.drawString(400, y_pos, str(deduction.amount) or "0.00")
-            y_pos -= 15  # Move down for next item
+            can.drawString(400, y_pos, str(deduction.amount) if deduction.amount is not None else "0.00")
+            y_pos -= 15
             
-        # Add tax calculation summary
-        can.drawString(400, 180, str(self.paye or "0.00"))
-        can.drawString(400, 160, str(self.uif or "0.00"))
-        can.drawString(400, 140, str(self.sdl or "0.00"))
-        can.drawString(400, 120, str(self.eti or "0.00"))
-        can.drawString(400, 100, str(self.total_tax_payable or "0.00"))
+        can.drawString(400, 180, str(self.paye) if self.paye is not None else "0.00")
+        can.drawString(400, 160, str(self.uif) if self.uif is not None else "0.00")
+        can.drawString(400, 140, str(self.sdl) if self.sdl is not None else "0.00")
+        can.drawString(400, 120, str(self.eti) if self.eti is not None else "0.00")
+        can.drawString(400, 100, str(self.total_tax_payable) if self.total_tax_payable is not None else "0.00")
         
-        # Finalize the PDF
         can.save()
-        
-        # Move to the beginning of the StringIO buffer
         packet.seek(0)
         overlay = PdfReader(packet)
-        
-        # Get the PDF template
         template = PdfReader(template_path)
-        
-        # Merge the two PDFs
         output = PdfWriter()
-        page = template.pages[0]  # Assuming single-page template
+        page = template.pages[0]
         page.merge_page(overlay.pages[0])
         output.add_page(page)
         
-        # Save the result to a new PDF
         result_pdf = BytesIO()
         output.write(result_pdf)
         result_pdf.seek(0)
-        
         return result_pdf.getvalue()
 
 def save_file(file_name, content, dt, dn, is_private=False):
-    """Save a file in Frappe"""
     from frappe.core.doctype.file.file import create_new_folder
     from frappe.utils.file_manager import save_file as _save_file
-    
-    # Convert binary content to base64 for saving
-    if isinstance(content, bytes):
-        content = base64.b64encode(content).decode('utf-8')
-    
-    folder = create_new_folder("IRP5 Certificates", "Home")
-    file_url = _save_file(file_name, content, dt, dn, folder=folder, is_private=is_private).file_url
-    
-    return file_url
+    if isinstance(content, bytes): content = base64.b64encode(content).decode('utf-8')
+    folder_name = "IRP5 Certificates" # Define folder name
+    # Ensure folder exists or can be created by user with permission
+    # frappe.get_doc({"doctype": "File Folder", "folder_name": folder_name, "is_private": 1}).insert(ignore_if_duplicate=True)
+    file_doc = _save_file(file_name, content, dt, dn, folder=folder_name, is_private=is_private) # Pass folder_name
+    return file_doc

@@ -89,7 +89,7 @@
    "fieldtype": "Select",
    "in_list_view": 1,
    "label": "Status",
-   "options": "Draft\nPrepared\nSubmitted\nAccepted\nRejected",
+   "options": "Draft\nPrepared\nSubmitted\nAccepted\nRejected\nCancelled",
    "reqd": 1
   },
   {
@@ -283,6 +283,7 @@
  "owner": "Administrator",
  "permissions": [
   {
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
@@ -296,6 +297,7 @@
    "write": 1
   },
   {
+   "cancel": 1,
    "create": 1,
    "delete": 1,
    "email": 1,
