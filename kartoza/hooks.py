@@ -49,9 +49,12 @@ doctype_js = {
 	"Salary Structure": "custom_js/salary_structure.js",
 	"COIDA Annual Return": "custom_js/coida_annual_return.js",
 	"Workplace Injury": "custom_js/workplace_injury.js",
-	"OID Claim": "custom_js/oid_claim.js"
+	"OID Claim": "custom_js/oid_claim.js",
+	"EMP501 Reconciliation": "kartoza/doctype/emp501_reconciliation/emp501_reconciliation.js"
 }
-# doctype_list_js = {"doctype" : "public/js/doctype_list.js"}
+doctype_list_js = {
+	"EMP501 Reconciliation": "kartoza/doctype/emp501_reconciliation/emp501_reconciliation_list.js"
+}
 # doctype_tree_js = {"doctype" : "public/js/doctype_tree.js"}
 # doctype_calendar_js = {"doctype" : "public/js/doctype_calendar.js"}
 

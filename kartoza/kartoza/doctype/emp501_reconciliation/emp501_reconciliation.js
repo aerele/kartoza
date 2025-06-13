@@ -25,7 +25,7 @@ frappe.ui.form.on('EMP501 Reconciliation', {
         
         if (frm.doc.docstatus === 1) {
             // Submitted state
-            if (frm.doc.status === "Prepared") {
+            if (frm.doc.status === "Submitted") { // Check against custom status
                 frm.add_custom_button(__('Generate IRP5 Certificates'), function() {
                     frm.call({
                         doc: frm.doc,
@@ -33,7 +33,7 @@ frappe.ui.form.on('EMP501 Reconciliation', {
                         callback: function(r) {
                             if (r.message) {
                                 frappe.show_alert({
-                                    message: __(`${r.message} IRP5 certificates generated`),
+                                    message: __(`${r.message} IRP5 certificates processed`),
                                     indicator: 'green'
                                 });
                                 frm.refresh();
@@ -50,7 +50,7 @@ frappe.ui.form.on('EMP501 Reconciliation', {
                                 doc: frm.doc,
                                 method: 'submit_to_sars',
                                 callback: function(r) {
-                                    if (r.message) {
+                                    if (r.message && r.message.status === 'success') {
                                         frappe.show_alert({
                                             message: __(r.message.message),
                                             indicator: 'green'
@@ -72,7 +72,7 @@ frappe.ui.form.on('EMP501 Reconciliation', {
                         emp501: frm.doc.name
                     },
                     callback: function(r) {
-                        if (r.message) {
+                        if (r.message && r.message.file_url) {
                             window.open(r.message.file_url);
                         }
                     }
@@ -82,65 +82,72 @@ frappe.ui.form.on('EMP501 Reconciliation', {
     },
     
     tax_year: function(frm) {
-        // Set from_date and to_date based on tax year and reconciliation period
         if (frm.doc.tax_year && frm.doc.reconciliation_period) {
-            frappe.db.get_doc('Fiscal Year', frm.doc.tax_year)
-                .then(fiscal_year => {
-                    let year_start = fiscal_year.year_start_date;
-                    let year_end = fiscal_year.year_end_date;
-                    
-                    if (frm.doc.reconciliation_period === "Interim") {
-                        // Interim period: March to August
-                        frm.set_value('from_date', year_start);
-                        
-                        // Calculate August 31st of the same year
-                        let to_date = new Date(year_start);
-                        to_date.setMonth(7); // August (0-indexed)
-                        to_date.setDate(31);
-                        frm.set_value('to_date', frappe.datetime.obj_to_str(to_date));
-                    } else if (frm.doc.reconciliation_period === "Final") {
-                        // Final period: March to February
-                        frm.set_value('from_date', year_start);
-                        frm.set_value('to_date', year_end);
-                    }
-                });
+            frm.trigger("get_dates");
         }
     },
     
     reconciliation_period: function(frm) {
-        // Trigger tax_year function to update dates
-        frm.trigger('tax_year');
+        if (frm.doc.tax_year && frm.doc.reconciliation_period) {
+            frm.trigger("get_dates");
+        }
+    },
+
+    get_dates: function(frm) {
+        frappe.call({
+            method: "kartoza.kartoza.doctype.emp501_reconciliation.emp501_reconciliation.get_period_dates",
+            args: {
+                tax_year: frm.doc.tax_year,
+                reconciliation_period: frm.doc.reconciliation_period
+            },
+            callback: function(r) {
+                if (r.message) {
+                    frm.set_value("from_date", r.message.from_date);
+                    frm.set_value("to_date", r.message.to_date);
+                }
+            }
+        });
     },
     
     company: function(frm) {
-        // Fetch reference numbers from company
+        // Fetch reference numbers from company via a whitelisted server method
         if (frm.doc.company) {
-            frappe.db.get_value('Company', frm.doc.company, ['tax_id'])
-                .then(r => {
+            // Add a flag to prevent multiple triggers
+            if (frm.company_set === frm.doc.company) {
+                return;
+            }
+            frm.company_set = frm.doc.company;
+
+            frappe.call({
+                method: 'kartoza.kartoza.doctype.emp501_reconciliation.emp501_reconciliation.get_company_tax_details',
+                args: {
+                    company: frm.doc.company
+                },
+                callback: function(r) {
                     if (r.message) {
                         frm.set_value('paye_reference_number', r.message.tax_id);
-                        
-                        // For SDL and UIF, we'll use the same tax ID with different prefixes
-                        // In a real implementation, these would be fetched from company settings
-                        let tax_id = r.message.tax_id || '';
-                        if (tax_id) {
-                            frm.set_value('sdl_reference_number', 'L' + tax_id.replace(/^[A-Z]/, ''));
-                            frm.set_value('uif_reference_number', 'U' + tax_id.replace(/^[A-Z]/, ''));
+                        frm.set_value('sdl_reference_number', r.message.custom_sdl_reference_number);
+                        frm.set_value('uif_reference_number', r.message.custom_uif_reference_number);
+
+                        if (!r.message.custom_sdl_reference_number && !frm.sdl_warning_shown) {
+                            frappe.msgprint({
+                                title: __('Missing SDL Number'),
+                                indicator: 'orange',
+                                message: __('The SDL Reference Number is missing for the selected company. Please update it in the Company form.')
+                            });
+                            frm.sdl_warning_shown = true;
+                        }
+                        if (!r.message.custom_uif_reference_number && !frm.uif_warning_shown) {
+                            frappe.msgprint({
+                                title: __('Missing UIF Number'),
+                                indicator: 'orange',
+                                message: __('The UIF Reference Number is missing for the selected company. Please update it in the Company form.')
+                            });
+                            frm.uif_warning_shown = true;
                         }
                     }
-                });
+                }
+            });
         }
-    }
-});
-
-frappe.ui.form.on('EMP501 EMP201 Reference', {
-    emp201_submissions_add: function(frm, cdt, cdn) {
-        // When a new row is added, calculate totals
-        frm.call('calculate_totals');
-    },
-    
-    emp201_submissions_remove: function(frm) {
-        // When a row is removed, calculate totals
-        frm.call('calculate_totals');
     }
 });

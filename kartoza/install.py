@@ -494,6 +494,14 @@ def make_custom_fields():
 		custom_fields["Company"].append(dict(fieldname='custom_vat_number', label='VAT Number',
 						fieldtype='Data', insert_after='tax_id', description="South African VAT Number",
 						length=10))
+
+	if not frappe.get_meta("Company").get_field("custom_sdl_reference_number"):
+		custom_fields["Company"].append(dict(fieldname='custom_sdl_reference_number', label='SDL Reference Number',
+						fieldtype='Data', insert_after='custom_vat_number'))
+
+	if not frappe.get_meta("Company").get_field("custom_uif_reference_number"):
+		custom_fields["Company"].append(dict(fieldname='custom_uif_reference_number', label='UIF Reference Number',
+						fieldtype='Data', insert_after='custom_sdl_reference_number'))
 						
 	if not frappe.get_meta("Employee").get_field("custom_id_number"):
 		custom_fields["Employee"].append(dict(fieldname='custom_id_number', label='ID Number',

@@ -325,5 +325,8 @@
  "sort_field": "modified",
  "sort_order": "DESC",
  "states": [],
- "track_changes": 1
+ "track_changes": 1,
+ "default_view": "List",
+ "force_re_route_to_default_view": 0,
+ "show_preview_popup": 0
 }
