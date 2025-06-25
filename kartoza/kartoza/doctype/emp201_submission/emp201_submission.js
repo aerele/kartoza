@@ -22,34 +22,16 @@ frappe.ui.form.on("EMP201 Submission", {
 
         if (frm.doc.docstatus === 0) {
             frm.add_custom_button(__("Fetch EMP201 Data"), function() {
-                console.log("EMP201 JS: Before Fetch Data - frm.is_new():", frm.is_new(), "frm.doc.name:", frm.doc.name);
                 frm.call({
                     doc: frm.doc,
                     method: "fetch_emp201_data",
                     callback: function(r) {
-                        console.log("EMP201 JS: After Fetch Data - frm.is_new():", frm.is_new(), "frm.doc.name:", frm.doc.name, "Response message:", r.message);
-                        if (r.message) { // r.message is the updated doc from the server
-                            // First, sync the entire document. This updates frm.doc.
-                            frappe.model.sync(r.message);
-                            
-                            // Then, explicitly use frm.set_value for each calculated field.
-                            // This ensures both frm.doc is updated for these fields AND their UI display is refreshed.
-                            const calculated_fields = [
-                                "gross_paye_before_eti", "eti_carried_forward_from_previous",
-                                "eti_generated_current_month", "total_eti_available",
-                                "eti_utilized_current_month", "net_paye_payable",
-                                "eti_to_be_carried_forward", "uif_payable", "sdl_payable"
-                            ];
-                            calculated_fields.forEach(function(field) {
-                                if (r.message.hasOwnProperty(field)) {
-                                    frm.set_value(field, r.message[field]);
-                                }
+                        if (r.message && Object.keys(r.message).length > 0) {
+                            // r.message is now a dictionary of calculated values
+                            Object.keys(r.message).forEach(function(field) {
+                                frm.set_value(field, r.message[field]);
                             });
-                            
-                            // Finally, refresh the overall form state (e.g., save status, title if name changed).
-                            // This will also re-render other fields if their values in frm.doc were changed by frappe.model.sync.
-                            frm.refresh(); 
-
+                            frm.refresh_fields();
                             frappe.msgprint(__("EMP201 data fetched successfully."));
                         } else if (r.exc) {
                             frappe.msgprint({
