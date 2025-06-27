@@ -100,7 +100,7 @@ class IRP5Certificate(Document):
             frappe.throw(_("Employee, From Date, and To Date are required. Ensure Tax Year and Period are set."))
             
         from_date, to_date = getdate(self.from_date), getdate(self.to_date)
-        self.income_details, self.deduction_details = [], []
+        self.income_details, self.deduction_details, self.company_contribution_details = [], [], []
         
         salary_slips = frappe.get_all("Salary Slip",
             filters={"employee": self.employee, "start_date": [">=", from_date], "end_date": ["<=", to_date], "docstatus": 1},
@@ -113,44 +113,52 @@ class IRP5Certificate(Document):
             self.calculate_totals()
             return {"message": "No salary slips found, totals (including ETI) recalculated."}
             
-        income_map, deduction_map = {}, {}
+        income_map, deduction_map, contribution_map = {}, {}, {}
         
         for slip_data in salary_slips:
             salary_slip_doc = frappe.get_doc("Salary Slip", slip_data.name)
+
+            if not salary_slip_doc:
+                frappe.log_error(f"Could not find Salary Slip {slip_data.name}", "IRP5 Certificate Generation")
+                continue
             
             for earning in salary_slip_doc.earnings:
-                income_code = self.get_income_code(earning.salary_component)
-                if not income_code: continue
-                income_map.setdefault(income_code, {"code": income_code, "description": self.get_income_description(income_code), "amount": 0})
-                income_map[income_code]["amount"] += flt(earning.amount)
+                is_contribution = frappe.db.get_value("Salary Component", earning.salary_component, "is_company_contribution")
+                if is_contribution:
+                    contribution_code = self.get_deduction_code(earning.salary_component, is_company_contribution=True)
+                    if contribution_code:
+                        contribution_map.setdefault(contribution_code, {"code": contribution_code, "description": self.get_deduction_description(contribution_code), "amount": 0})
+                        contribution_map[contribution_code]["amount"] += flt(earning.amount)
+                else:
+                    income_code = self.get_income_code(earning.salary_component)
+                    if not income_code: continue
+                    income_map.setdefault(income_code, {"code": income_code, "description": self.get_income_description(income_code), "amount": 0})
+                    income_map[income_code]["amount"] += flt(earning.amount)
             
-            for deduction in salary_slip_doc.deductions: # Employee deductions
+            for deduction in salary_slip_doc.deductions:
                 deduction_code = self.get_deduction_code(deduction.salary_component, is_company_contribution=False)
-                if not deduction_code: continue
+                if not deduction_code:
+                    continue
                 deduction_map.setdefault(deduction_code, {"code": deduction_code, "description": self.get_deduction_description(deduction_code), "amount": 0})
                 deduction_map[deduction_code]["amount"] += flt(deduction.amount)
-
-            for contribution in salary_slip_doc.get("company_contributions", []): # Employer contributions
-                # Assuming company_contributions is the field name for the child table
-                contribution_code = self.get_deduction_code(contribution.salary_component, is_company_contribution=True)
-                if not contribution_code: continue
-                deduction_map.setdefault(contribution_code, {"code": contribution_code, "description": self.get_deduction_description(contribution_code), "amount": 0})
-                deduction_map[contribution_code]["amount"] += flt(contribution.amount)
-                
+        
         for code, details in income_map.items():
             self.append("income_details", {"income_code": code, "description": details["description"], "amount": details["amount"], "tax_year": self.tax_year, "period": self.reconciliation_period})
             
         for code, details in deduction_map.items():
             self.append("deduction_details", {"deduction_code": code, "description": details["description"], "amount": details["amount"], "tax_year": self.tax_year, "period": self.reconciliation_period})
+
+        for code, details in contribution_map.items():
+            self.append("company_contribution_details", {"contribution_code": code, "description": details["description"], "amount": details["amount"]})
             
         self.calculate_eti() 
         self.calculate_totals()
-        return {"income_count": len(income_map), "deduction_count": len(deduction_map), "message": "Certificate data generated."}
+        return {"income_count": len(income_map), "deduction_count": len(deduction_map), "contribution_count": len(contribution_map), "message": "Certificate data generated."}
         
     def get_income_code(self, salary_component):
         # Placeholder - expand this with actual mappings
         component_mapping = {
-            "Basic Salary": "3601", "Overtime": "3607", "Bonus": "3605", "Commission": "3605",
+            "Basic Salary": "3601", "Basic": "3601", "Overtime": "3607", "Bonus": "3605", "Commission": "3605",
             "Annual Payment": "3605", "Leave Encashment": "3605", 
             "Travel Allowance": "3701", # Example, verify correct code
             "Subsistence Allowance": "3704", # Example, verify correct code
@@ -178,7 +186,7 @@ class IRP5Certificate(Document):
             "UIF Contribution": "4141", # Employer UIF (often same code as employee for reporting, but context matters)
             "Pension Fund": "4472", # Employer Pension Contribution
             "Medical Aid": "4474", # Employer Medical Contribution
-            "SDL": "4142", # Skills Development Levy (Employer)
+            "SDL": "4142", "Skills Development Levy": "4142", # Skills Development Levy (Employer)
             # Group Life, Disability etc. might have codes like 44xx
         }
         if is_company_contribution:

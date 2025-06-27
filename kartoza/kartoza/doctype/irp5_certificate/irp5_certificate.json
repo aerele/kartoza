@@ -22,6 +22,8 @@
   "section_break_13",
   "deduction_details_section",
   "deduction_details",
+  "company_contribution_details_section",
+  "company_contribution_details",
   "section_break_16",
   "tax_calculations_section",
   "paye",
@@ -37,7 +39,8 @@
    "fieldtype": "Data",
    "label": "Certificate Number",
    "reqd": 1,
-   "unique": 1
+   "unique": 1,
+   "read_only": 1
   },
   {
    "fieldname": "tax_year",
@@ -127,6 +130,17 @@
    "fieldtype": "Table",
    "label": "Deduction Details",
    "options": "IRP5 Deduction Detail"
+  },
+  {
+   "fieldname": "company_contribution_details_section",
+   "fieldtype": "Section Break",
+   "label": "Company Contribution Details"
+  },
+  {
+   "fieldname": "company_contribution_details",
+   "fieldtype": "Table",
+   "label": "Company Contribution Details",
+   "options": "IRP5 Company Contribution Detail"
   },
   {
    "fieldname": "section_break_16",
