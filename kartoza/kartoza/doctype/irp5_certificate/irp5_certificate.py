@@ -141,6 +141,12 @@ class IRP5Certificate(Document):
                     continue
                 deduction_map.setdefault(deduction_code, {"code": deduction_code, "description": self.get_deduction_description(deduction_code), "amount": 0})
                 deduction_map[deduction_code]["amount"] += flt(deduction.amount)
+
+            for contribution in salary_slip_doc.get("company_contribution", []):
+                contribution_code = self.get_deduction_code(contribution.salary_component, is_company_contribution=True)
+                if contribution_code:
+                    contribution_map.setdefault(contribution_code, {"code": contribution_code, "description": self.get_deduction_description(contribution_code), "amount": 0})
+                    contribution_map[contribution_code]["amount"] += flt(contribution.amount)
         
         for code, details in income_map.items():
             self.append("income_details", {"income_code": code, "description": details["description"], "amount": details["amount"], "tax_year": self.tax_year, "period": self.reconciliation_period})
@@ -187,6 +193,7 @@ class IRP5Certificate(Document):
             "Pension Fund": "4472", # Employer Pension Contribution
             "Medical Aid": "4474", # Employer Medical Contribution
             "SDL": "4142", "Skills Development Levy": "4142", # Skills Development Levy (Employer)
+            "Company Contribution": "4497",
             # Group Life, Disability etc. might have codes like 44xx
         }
         if is_company_contribution:
@@ -201,7 +208,8 @@ class IRP5Certificate(Document):
             "4006": "Retirement Annuity Fund Contributions", "4005": "Medical Scheme Fees (Employee Paid)",
             "4472": "Employer's Pension Fund Contributions", 
             "4474": "Employer's Medical Scheme Contributions",
-            "4142": "SDL"
+            "4142": "SDL",
+            "4497": "Company Contributions"
         }
         return descriptions.get(deduction_code, f"Deduction Code {deduction_code}")
         
@@ -321,10 +329,20 @@ class IRP5Certificate(Document):
             y_pos -= 15
             
         y_pos = 300
-        for deduction in self.deduction_details: # This now includes company contributions
+        for deduction in self.deduction_details:
             can.drawString(100, y_pos, deduction.deduction_code or "")
             can.drawString(150, y_pos, deduction.description or "")
             can.drawString(400, y_pos, str(deduction.amount) if deduction.amount is not None else "0.00")
+            y_pos -= 15
+
+        y_pos -= 30  # Add space between tables
+        can.drawString(100, y_pos, "Company Contributions")
+        y_pos -= 15
+        
+        for contribution in self.company_contribution_details:
+            can.drawString(100, y_pos, contribution.contribution_code or "")
+            can.drawString(150, y_pos, contribution.description or "")
+            can.drawString(400, y_pos, str(contribution.amount) if contribution.amount is not None else "0.00")
             y_pos -= 15
             
         can.drawString(400, 180, str(self.paye) if self.paye is not None else "0.00")
