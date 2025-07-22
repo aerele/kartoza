@@ -99,9 +99,18 @@ class SouthAfricanVATSettings(Document):
         
     def update_tax_templates(self):
         """Create or update tax templates based on VAT rates"""
+        # Only proceed if default_vat_report_company is set
+        if not self.default_vat_report_company:
+            frappe.msgprint(
+                "Default VAT Report Company is not set. Skipping tax template creation. "
+                "Please set this value in South African VAT Settings after company setup.",
+                indicator='yellow'
+            )
+            return
+
         # Create sales tax template
         self.create_or_update_tax_template("Sales", self.output_vat_account)
-        
+
         # Create purchase tax template
         self.create_or_update_tax_template("Purchase", self.input_vat_account)
         
@@ -110,12 +119,7 @@ class SouthAfricanVATSettings(Document):
         template_name = f"South Africa VAT {self.standard_vat_rate}% - {template_type}"
         doctype_name = f"{template_type} Taxes and Charges Template"
 
-        # Ensure default_vat_report_company is set before proceeding
-        if not self.default_vat_report_company:
-            frappe.throw(
-                "Default VAT Report Company is not set in South African VAT Settings. "
-                "This is required to create or update tax templates."
-            )
+        # No need to check for default_vat_report_company here; handled in update_tax_templates
 
         if frappe.db.exists(doctype_name, template_name):
             tax_template = frappe.get_doc(doctype_name, template_name)
