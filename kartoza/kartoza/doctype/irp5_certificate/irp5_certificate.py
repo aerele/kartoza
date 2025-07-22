@@ -73,20 +73,24 @@ class IRP5Certificate(Document):
         self.status = "Prepared"
         self.calculate_totals()
         
+
     def calculate_totals(self):
         self.paye, self.uif, self.sdl = 0, 0, 0
+        # Sum PAYE and UIF from deduction_details
         for deduction in self.deduction_details:
-            if deduction.deduction_code == "4102": self.paye += flt(deduction.amount) # PAYE
-            elif deduction.deduction_code == "4141": self.uif += flt(deduction.amount) # UIF Employee
-            # Add other codes if SDL is part of deductions, or handle it separately
-            # Example: if SDL code 4142 is used for employee SDL portion
-            # elif deduction.deduction_code == "4142": self.sdl += flt(deduction.amount)
+            if deduction.deduction_code == "4102":
+                self.paye += flt(deduction.amount) # PAYE
+            elif deduction.deduction_code == "4141":
+                self.uif += flt(deduction.amount) # UIF Employee
+            # If SDL is ever in deductions (rare), include it
+            elif deduction.deduction_code == "4142":
+                self.sdl += flt(deduction.amount)
 
-        # Note: SDL is typically an employer levy. If it's displayed on IRP5,
-        # it might come from a specific company contribution code or be calculated differently.
-        # For now, assuming it might be part of deductions or needs a specific source.
-        # If SDL is purely employer levy and not on IRP5 this way, self.sdl might remain 0.
-        
+        # SDL is typically a company contribution (code 4142)
+        for contribution in getattr(self, 'company_contribution_details', []):
+            if getattr(contribution, 'contribution_code', None) == "4142" or (getattr(contribution, 'description', "").strip().upper() == "SDL"):
+                self.sdl += flt(contribution.amount)
+
         self.total_tax_payable = self.paye + self.uif + self.sdl - flt(self.eti)
         
     @frappe.whitelist()
