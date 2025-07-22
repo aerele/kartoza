@@ -369,14 +369,17 @@ class CustomPayrollEntry(PayrollEntry):
 						# 	self.provisional_payment[provisional_key] = 0
 						self.provisional_payment[provisional_key] = self.provisional_payment.get(provisional_key, 0) + sal_detail.amount
 
-						if self.payment_account_currency != self.company_currency and frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and frappe.db.get_value("Salary Component", sal_detail.salary_component, "custom_is_sdl"):
-							self.sdl_payment_amount += sal_detail.amount
-						else:
-							salary_slip_total += sal_detail.amount
+				# Use Payroll Settings to identify SDL component
+				sdl_salary_component = frappe.db.get_single_value("Payroll Settings", "sdl_salary_component")
+				if self.payment_account_currency != self.company_currency and frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and sal_detail.salary_component == sdl_salary_component:
+					self.sdl_payment_amount += sal_detail.amount
+				else:
+					salary_slip_total += sal_detail.amount
 
 					for sal_detail in salary_slip.deductions:
 						variable_salary, income_tax_component = frappe.db.get_value("Salary Component", sal_detail.salary_component, ["variable_based_on_taxable_salary", "is_income_tax_component"])
-						if (variable_salary and income_tax_component) or (frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and not frappe.db.get_value("Salary Component", sal_detail.salary_component, "custom_is_sdl")):
+				sdl_salary_component = frappe.db.get_single_value("Payroll Settings", "sdl_salary_component")
+				if (variable_salary and income_tax_component) or (frappe.db.get_value("Salary Component", sal_detail.salary_component, "is_company_contribution") and sal_detail.salary_component != sdl_salary_component):
 							component_account = frappe.db.get_value("Salary Component Account", {"parent":sal_detail.salary_component, "company": self.company}, "account")
 							provisional_key = (component_account, business_unit, employee_type)
 							# if provisional_key not in self.provisional_payment:
