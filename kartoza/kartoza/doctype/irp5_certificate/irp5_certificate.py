@@ -23,15 +23,27 @@ try:
 except ImportError:
     frappe.log_error("PDF generation libraries not installed. Install PyPDF2 and reportlab for PDF functionality.")
 
+
+
 class IRP5Certificate(Document):
     def validate(self):
-        if self.employee and self.tax_year and not self.certificate_number:
-            self.set_certificate_number()
-        self.validate_dates() 
-        self.validate_employee()
+        # Only require employee for Individual mode
+        if getattr(self, 'generation_mode', None) == 'Bulk':
+            # Bulk: require main fields, but not employee
+            if not self.tax_year or not self.from_date or not self.to_date or not self.reconciliation_period:
+                frappe.throw(_("Tax Year, From Date, To Date, and Reconciliation Period are required for Bulk generation."), title=_("Missing Required Fields"))
+            self.validate_dates()
+        else:
+            # Individual: require employee and main fields
+            if not self.employee:
+                frappe.throw(_("Employee is required"), title=_("Missing Employee"))
+            if self.employee and self.tax_year and not self.certificate_number:
+                self.set_certificate_number()
+            self.validate_dates()
+            self.validate_employee()
         if not self.status:
             self.status = "Draft"
-        
+    
     def validate_dates(self):
         if not self.from_date or not self.to_date:
             frappe.throw(_("Both From Date and To Date are required"), title=_("Missing Required Dates"))
@@ -56,7 +68,9 @@ class IRP5Certificate(Document):
                 frappe.throw(_("Final period must span from March 1 to February of the next year"), title=_("Invalid Tax Year"))
 
     def validate_employee(self):
-        if not self.employee: frappe.throw(_("Employee is required"), title=_("Missing Employee"))
+        # Only validate employee if present (for Individual mode)
+        if not self.employee:
+            return
         if not self.employee_name: self.employee_name = frappe.db.get_value("Employee", self.employee, "employee_name")
         if not self.company: self.company = frappe.db.get_value("Employee", self.employee, "company")
             
@@ -95,17 +109,22 @@ class IRP5Certificate(Document):
         
     @frappe.whitelist()
     def generate_certificate_data(self):
-        if not self.certificate_number:
+        # For Bulk, employee may not be set on the main form
+        if getattr(self, 'generation_mode', None) == 'Bulk':
+            if not self.tax_year or not self.from_date or not self.to_date:
+                frappe.throw(_("Tax Year, From Date, and To Date are required for Bulk generation."))
+        else:
             if not self.employee or not self.tax_year:
                 frappe.throw(_("Employee and Tax Year must be set to generate certificate data and number."))
+            if not self.employee or not self.from_date or not self.to_date:
+                frappe.throw(_("Employee, From Date, and To Date are required. Ensure Tax Year and Period are set."))
+        if not self.certificate_number and getattr(self, 'generation_mode', None) != 'Bulk':
             self.set_certificate_number()
 
-        if not self.employee or not self.from_date or not self.to_date:
-            frappe.throw(_("Employee, From Date, and To Date are required. Ensure Tax Year and Period are set."))
-            
         from_date, to_date = getdate(self.from_date), getdate(self.to_date)
         self.income_details, self.deduction_details, self.company_contribution_details = [], [], []
         
+        # For Bulk, this method is called per-employee, so self.employee will be set
         salary_slips = frappe.get_all("Salary Slip",
             filters={"employee": self.employee, "start_date": [">=", from_date], "end_date": ["<=", to_date], "docstatus": 1},
             fields=["name"], order_by="start_date"
@@ -368,6 +387,73 @@ class IRP5Certificate(Document):
         output.write(result_pdf)
         result_pdf.seek(0)
         return result_pdf.getvalue()
+
+@frappe.whitelist()
+def bulk_generate_certificates(filters_json=None):
+    """
+    Generate IRP5 Certificates in bulk for employees matching the given filters.
+    filters_json: JSON string with filters (e.g., {"company": "...", "tax_year": "...", "from_date": "...", "to_date": "...", "employee_list": [..]})
+    Returns a summary of created/updated certificates.
+    """
+    import json
+    filters = json.loads(filters_json) if filters_json else {}
+    company = filters.get("company")
+    tax_year = filters.get("tax_year")
+    from_date = filters.get("from_date")
+    to_date = filters.get("to_date")
+    reconciliation_period = filters.get("reconciliation_period")
+    employee_list = filters.get("employee_list")
+    department = filters.get("department")
+
+    # Build employee filter
+    emp_filters = {}
+    if company:
+        emp_filters["company"] = company
+    if department:
+        emp_filters["department"] = department
+    if employee_list:
+        emp_filters["name"] = ["in", employee_list]
+
+    employees = frappe.get_all("Employee", filters=emp_filters, fields=["name"])
+    if not employees:
+        return {"error": "No employees found for the given filters."}
+    # Validate required main fields
+    if not tax_year or not from_date or not to_date or not reconciliation_period:
+        return {"error": "Tax Year, From Date, To Date, and Reconciliation Period must be set on the main form for bulk generation."}
+
+    created, updated, errors = [], [], []
+    for emp in employees:
+        try:
+            cert_filters = {
+                "employee": emp.name,
+                "tax_year": tax_year,
+                "from_date": from_date,
+                "to_date": to_date,
+            }
+            cert = frappe.get_all("IRP5 Certificate", filters=cert_filters, fields=["name"])
+            if cert:
+                cert_doc = frappe.get_doc("IRP5 Certificate", cert[0].name)
+                cert_doc.reconciliation_period = reconciliation_period or cert_doc.reconciliation_period
+                cert_doc.employee = emp.name
+                cert_doc.tax_year = tax_year
+                cert_doc.from_date = from_date
+                cert_doc.to_date = to_date
+                cert_doc.generate_certificate_data()
+                cert_doc.save()
+                updated.append(cert_doc.name)
+            else:
+                cert_doc = frappe.new_doc("IRP5 Certificate")
+                cert_doc.employee = emp.name
+                cert_doc.tax_year = tax_year
+                cert_doc.from_date = from_date
+                cert_doc.to_date = to_date
+                cert_doc.reconciliation_period = reconciliation_period
+                cert_doc.generate_certificate_data()
+                cert_doc.save()
+                created.append(cert_doc.name)
+        except Exception as e:
+            errors.append({"employee": emp.name, "error": str(e)})
+    return {"created": created, "updated": updated, "errors": errors, "message": f"Bulk IRP5 generation complete. Created: {len(created)}, Updated: {len(updated)}, Errors: {len(errors)}"}
 
 def save_file(file_name, content, dt, dn, is_private=False):
     from frappe.core.doctype.file.file import create_new_folder
