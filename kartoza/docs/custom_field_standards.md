@@ -10,6 +10,7 @@ Our codebase analysis revealed inconsistent custom field naming patterns:
 
 1. **Mixed Prefixing**: Some custom fields use the `custom_` prefix while others don't:
    - **With prefix**: `custom_id_number`, `custom_hours_per_month`, `custom_payroll_payable_account`
+   #Amended custom_payroll_payable_account to be created as payroll_payable_bank_account as was conflicting between Employee and Payroll Entry.
    - **Without prefix**: `vat_number`, `amount_per_kilometer`, `calculate_annual_taxable_amount_based_on`
 
 2. **Inconsistent References**: Some code references fields with the prefix while other code references the same fields without the prefix, leading to failures.

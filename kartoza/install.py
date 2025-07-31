@@ -463,13 +463,13 @@ def make_custom_fields():
 		custom_fields["Payroll Settings"].append(dict(fieldname='calculate_annual_taxable_amount_based_on', label='Calculate Annual Taxable Amount Based On',
 						fieldtype='Select', options="\nJoining and Relieving Date\nPayroll Period", default="Payroll Period", insert_after='daily_wages_fraction_for_half_day'))
 
-	if not frappe.get_meta("Employee").get_field("custom_payroll_payable_account"):
-		custom_fields["Employee"].append(dict(fieldname='custom_payroll_payable_account', label='Payroll Payable Bank Account',
+	if not frappe.get_meta("Employee").get_field("payroll_payable_bank_account"):
+		custom_fields["Employee"].append(dict(fieldname='payroll_payable_bank_account', label='Payroll Payable Bank Account',
 						fieldtype='Link', options="Bank Account", insert_after='payroll_cost_center'))
 
 	if not frappe.get_meta("Employee").get_field("custom_hours_per_month"):
 		custom_fields["Employee"].append(dict(fieldname='custom_hours_per_month', label='Hours Per Month',
-						fieldtype='Float', insert_after='custom_payroll_payable_account'))
+						fieldtype='Float', insert_after='payroll_payable_bank_account'))
 
 	if not frappe.get_meta("Additional Salary").get_field("is_company_contribution"):
 		custom_fields["Additional Salary"].append(dict(fieldname='is_company_contribution', label='Is Company Contribution',

@@ -11,10 +11,10 @@ def execute():
 						fieldtype='Select', options="\nJoining and Relieving Date\nPayroll Period", default="Payroll Period", insert_after='daily_wages_fraction_for_half_day')
 		],
 		"Employee":[
-			dict(fieldname='payroll_payable_account', label='Payroll Payable Bank Account',
+			dict(fieldname='payroll_payable_bank_account', label='Payroll Payable Bank Account',
 						fieldtype='Link', options="Bank Account", insert_after='payroll_cost_center'),
 			dict(fieldname='hours_per_month', label='Hours Per Month',
-						fieldtype='Float', insert_after='payroll_payable_account')
+						fieldtype='Float', insert_after='payroll_payable_bank_account')
 		],
 		"Additional Salary":[
 			dict(fieldname='is_company_contribution', label='Is Company Contribution',
