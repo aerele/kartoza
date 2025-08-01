@@ -69,16 +69,16 @@ class CustomPayrollEntry(PayrollEntry):
 			if not i.custom_employee_type:
 				i.custom_employee_type = frappe.db.get_value("Employee", i.employee, "custom_employee_type")
 
-			if i.payroll_payable_bank_account:
-				account = frappe.db.get_value("Bank Account", i.payroll_payable_bank_account, "account")
+			if i.custom_payroll_payable_bank_account:
+				account = frappe.db.get_value("Bank Account", i.custom_payroll_payable_bank_account, "account")
 				if account:
 					i.custom_bank_account_currency = frappe.db.get_value("Account", account, "account_currency")
 					frappe.log_error(f"Employee: {i.employee} - GL Account Currency: '{i.custom_bank_account_currency}'", "Kartoza Payroll Debug")
 				else:
 					# If bank account name is present but doesn't exist as a record
-					frappe.log_error(f"Employee: {i.employee} - Bank Account record '{i.payroll_payable_bank_account}' does not exist.", "Kartoza Payroll Debug")
+					frappe.log_error(f"Employee: {i.employee} - Bank Account record '{i.custom_payroll_payable_bank_account}' does not exist.", "Kartoza Payroll Debug")
 
-			if not i.payroll_payable_bank_account: # This is the final check
+			if not i.custom_payroll_payable_bank_account: # This is the final check
 				frappe.throw("Payroll Payable Bank Account not found for Employee:<a href='/app/employee/{0}'><b>{0}</b></a>".format(i.employee))
 
 			if not i.custom_employee_type:

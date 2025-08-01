@@ -82,7 +82,7 @@
    "docstatus": 0,
    "doctype": "Custom Field",
    "dt": "Payroll Employee Detail",
-   "fetch_from": "employee.payroll_payable_account",
+   "fetch_from": "employee.payroll_payable_bank_account",
    "fetch_if_empty": 1,
    "fieldname": "custom_payroll_payable_bank_account",
    "fieldtype": "Link",
