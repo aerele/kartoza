@@ -86,6 +86,8 @@ _payroll_entry.get_payroll_entry_bank_entries = _custom_payroll_entry.get_payrol
 before_install = "kartoza.install.before_install"
 after_install = "kartoza.install.after_install"
 
+after_uninstall = "kartoza.uninstall.after_uninstall"
+
 after_migrate = [
 	"kartoza.install.make_custom_fields"
 ]
