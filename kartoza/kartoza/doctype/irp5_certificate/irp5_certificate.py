@@ -26,12 +26,30 @@ except ImportError:
 
 
 class IRP5Certificate(Document):
+    def autoname(self):
+        """Set name based on generation mode"""
+        if getattr(self, 'generation_mode', None) == 'Bulk':
+            # For bulk generation, create a placeholder certificate number
+            if not self.certificate_number:
+                self.set_bulk_certificate_number()
+        else:
+            # For individual generation, create certificate number if we have required fields
+            if self.employee and self.tax_year and not self.certificate_number:
+                self.set_certificate_number()
+        
+        # The name will be set from the certificate_number field
+        if self.certificate_number:
+            self.name = self.certificate_number
+    
     def validate(self):
         # Only require employee for Individual mode
         if getattr(self, 'generation_mode', None) == 'Bulk':
             # Bulk: require main fields, but not employee
             if not self.tax_year or not self.from_date or not self.to_date or not self.reconciliation_period:
                 frappe.throw(_("Tax Year, From Date, To Date, and Reconciliation Period are required for Bulk generation."), title=_("Missing Required Fields"))
+            # For bulk generation, set a placeholder certificate number if not set
+            if not self.certificate_number:
+                self.set_bulk_certificate_number()
             self.validate_dates()
         else:
             # Individual: require employee and main fields
@@ -82,6 +100,15 @@ class IRP5Certificate(Document):
         tax_year_str = str(self.tax_year).replace("/", "-")
         unique_hash = frappe.generate_hash(length=8)
         self.certificate_number = f"IRP5-{tax_year_str}-{employee_id}-{unique_hash}"
+
+    def set_bulk_certificate_number(self):
+        """Set a placeholder certificate number for bulk generation"""
+        if not self.tax_year:
+            frappe.log_error("Attempted to set bulk certificate number without tax year.", "IRP5 Certificate Bulk Numbering")
+            return
+        tax_year_str = str(self.tax_year).replace("/", "-")
+        unique_hash = frappe.generate_hash(length=8)
+        self.certificate_number = f"IRP5-BULK-{tax_year_str}-{unique_hash}"
 
     def before_submit(self):
         self.status = "Prepared"
@@ -309,7 +336,7 @@ class IRP5Certificate(Document):
         # ... (rest of generate_irp5_pdf method remains largely the same)
         # Ensure all self.field references are valid and handle None for amounts
         if not pdf_generation_available: frappe.throw(_("PDF generation libraries not installed."))
-        template_path = frappe.get_app_path("kartoza", "kartoza", "docs", "Employee Income Payroll Certificate - IRP5 form.pdf")
+        template_path = frappe.get_app_path("kartoza", "kartoza", "print_format", "irp5_certificate", "Template_Employee Income Payroll Certificate - IRP5 form.pdf")
         if not os.path.exists(template_path): frappe.throw(_("IRP5 template not found..."))
             
         packet = BytesIO()

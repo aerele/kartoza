@@ -9,13 +9,13 @@ frappe.ui.form.on('IRP5 Certificate', {
             frm.set_df_property('deduction_details', 'hidden', 1);
             frm.set_df_property('company_contribution_details', 'hidden', 1);
             // Show summary if available
-            frm.refresh_field('custom_bulk_generation_summary');
+            frm.refresh_field('bulk_generation_summary');
         } else {
             frm.set_df_property('income_details', 'hidden', 0);
             frm.set_df_property('deduction_details', 'hidden', 0);
             frm.set_df_property('company_contribution_details', 'hidden', 0);
-            frm.set_value('custom_bulk_generation_summary', null);
-            frm.refresh_field('custom_bulk_generation_summary');
+            frm.set_value('bulk_generation_summary', null);
+            frm.refresh_field('bulk_generation_summary');
         }
         // Add unified Generate Certificate Data button in Draft state
         if (frm.doc.docstatus === 0) {
@@ -51,9 +51,9 @@ frappe.ui.form.on('IRP5 Certificate', {
                     if (!summary) {
                         summary = __('No certificates were created or updated.');
                     }
-                    frm.set_value('custom_bulk_generation_summary', summary);
+                    frm.set_value('bulk_generation_summary', summary);
                     frm.refresh();
-                    frm.refresh_field('custom_bulk_generation_summary');
+                    frm.refresh_field('bulk_generation_summary');
                         }
                     });
                 } else {
@@ -158,14 +158,14 @@ frappe.ui.form.on('IRP5 Certificate', {
             frm.set_df_property('income_details', 'hidden', 1);
             frm.set_df_property('deduction_details', 'hidden', 1);
             frm.set_df_property('company_contribution_details', 'hidden', 1);
-            frm.refresh_field('custom_bulk_generation_summary');
+            frm.refresh_field('bulk_generation_summary');
         } else {
             frm.set_df_property('employee', 'hidden', 0);
             frm.set_df_property('income_details', 'hidden', 0);
             frm.set_df_property('deduction_details', 'hidden', 0);
             frm.set_df_property('company_contribution_details', 'hidden', 0);
-            frm.set_value('custom_bulk_generation_summary', null);
-            frm.refresh_field('custom_bulk_generation_summary');
+            frm.set_value('bulk_generation_summary', null);
+            frm.refresh_field('bulk_generation_summary');
         }
         frm.refresh_fields();
     },

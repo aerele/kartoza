@@ -11,13 +11,31 @@ app_license = "MIT"
 
 
 fixtures = [
+	# Property Setters for other doctypes
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'variable']]	},
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Structure Assignment'], ["field_name", '=', 'base']]	},
 	{"dt": "Property Setter", "filters": [["doc_type", '=', 'Salary Slip'], ["field_name", '=', 'payroll_entry']]	},
-	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", '=', 'custom_employee_type']]	},
-	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", '=', 'custom_id_number']]	},
-	{"dt": "Custom Field", "filters": [["dt", '=', 'Payroll Settings'], ["fieldname", 'in', ['south_african_settings_section', 'paye_salary_component', 'uif_employee_salary_component', 'uif_employer_salary_component', 'sdl_salary_component', 'coida_salary_component']]]	},
-	{"dt": "Custom Field", "filters": [["dt", '=', 'Company'], ["fieldname", '=', 'coida_registration_number']]	},
+	
+	# Custom Fields for Employee (SA-specific fields)
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Employee'], ["fieldname", 'in', ['custom_employee_type', 'custom_id_number', 'custom_special_economic_zone', 'payroll_payable_bank_account', 'custom_hours_per_month']]]	},
+	
+	# Custom Fields for IRP5 Certificate (Bulk generation functionality)
+	{"dt": "Custom Field", "filters": [["dt", '=', 'IRP5 Certificate'], ["fieldname", 'in', ['generation_mode', 'bulk_department', 'bulk_employee_list', 'bulk_certificate_generation_summary', 'bulk_generation_summary']]]	},
+	
+	# Custom Fields for Payroll Settings (SA tax and statutory components)
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Payroll Settings'], ["fieldname", 'in', ['south_african_settings_section', 'paye_salary_component', 'uif_employee_salary_component', 'uif_employer_salary_component', 'sdl_salary_component', 'coida_salary_component', 'custom_disable_eti_calculation', 'calculate_annual_taxable_amount_based_on', 'custom_coida_salary_component']]]	},
+	
+	# Custom Fields for HR Settings
+	{"dt": "Custom Field", "filters": [["dt", '=', 'HR Settings'], ["fieldname", '=', 'amount_per_kilometer']]	},
+	
+	# Custom Fields for Company (SA registration numbers)
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Company'], ["fieldname", 'in', ['coida_registration_number', 'custom_coida_registration_number', 'custom_vat_number', 'custom_sdl_reference_number', 'custom_uif_reference_number']]]	},
+	
+	# Custom Fields for Additional Salary
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Additional Salary'], ["fieldname", '=', 'is_company_contribution']]	},
+	
+	# Custom Fields for Salary Structure Assignment
+	{"dt": "Custom Field", "filters": [["dt", '=', 'Salary Structure Assignment'], ["fieldname", '=', 'custom_annual_bonus']]	},
 ]
 
 # Includes in <head>

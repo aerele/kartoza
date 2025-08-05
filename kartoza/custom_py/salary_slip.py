@@ -13,6 +13,7 @@ from frappe.utils import (
 	get_link_to_form,
 	getdate,
 	month_diff,
+	fmt_money,
 )
 from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import (
 	get_benefit_component_amount,
@@ -33,7 +34,7 @@ from hrms.payroll.doctype.salary_slip.salary_slip import (
 from hrms.payroll.doctype.salary_slip.salary_slip_loan_utils import (
 	cancel_loan_repayment_entry,
 	make_loan_repayment_entry,
-	process_loan_interest_accruals,
+	process_loan_interest_accrual_and_demand,
 	set_loan_repayment,
 )
 from kartoza.custom_py.payroll_entry import (
