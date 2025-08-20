@@ -1,0 +1,35 @@
+{
+  "doctype": "DocType",
+  "name": "Bitemporal Analysis",
+  "module": "Kartoza",
+  "custom": 0,
+  "istable": 0,
+  "engine": "InnoDB",
+  "track_changes": 1,
+  "issingle": 1,
+  "permissions": [
+    {"role": "System Manager", "read": 1, "write": 1, "create": 1, "delete": 1},
+    {"role": "Accounts User", "read": 1}
+  ],
+  "fields": [
+    {"fieldname": "tab_details", "label": "Details", "fieldtype": "Tab Break"},
+      {"fieldname": "details_html", "label": "Details", "fieldtype": "HTML"},
+
+    {"fieldname": "tab_import", "label": "Bitemporal Import", "fieldtype": "Tab Break"},
+      {"fieldname": "import_embed", "label": "Bitemporal Import", "fieldtype": "HTML"},
+
+    {"fieldname": "tab_timeline", "label": "Analysis View", "fieldtype": "Tab Break"},
+      {"fieldname": "timeline_filters", "label": "Filters", "fieldtype": "Section Break"},
+      {"fieldname": "import_ref", "label": "Bitemporal Import", "fieldtype": "Link", "options": "Bitemporal Import"},
+      {"fieldname": "filter_action", "label": "Action", "fieldtype": "Select", "options": "\nSalary\nTax\nNet-pay\nOvertime"},
+      {"fieldname": "column_break_flt", "fieldtype": "Column Break"},
+      {"fieldname": "filter_from", "label": "From (Txn Time)", "fieldtype": "Datetime"},
+      {"fieldname": "filter_to", "label": "To (Txn Time)", "fieldtype": "Datetime"},
+  {"fieldname": "view_mode", "label": "View", "fieldtype": "Select", "options": "Table\nTimeline", "default": "Table"},
+  {"fieldname": "timeline_mode", "label": "Timeline Mode", "fieldtype": "Select", "options": "Transaction-time (when the fact was recorded)\nValid-time (when fact is true in the business world)\nBoth (2D bitemporal)", "default": "Valid-time (when fact is true in the business world)"},
+  {"fieldname": "axis_orientation", "label": "Axis", "fieldtype": "Select", "options": "Effective X / Transaction Y\nTransaction X / Valid Y", "default": "Effective X / Transaction Y"},
+
+    {"fieldname": "section_results", "label": "Results", "fieldtype": "Section Break"},
+    {"fieldname": "timeline_view", "label": "Analysis", "fieldtype": "HTML"}
+  ]
+}

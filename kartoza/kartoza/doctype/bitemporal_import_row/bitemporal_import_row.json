@@ -1,0 +1,27 @@
+{
+  "doctype": "DocType",
+  "name": "Bitemporal Import Row",
+  "module": "Kartoza",
+  "istable": 1,
+  "custom": 0,
+  "engine": "InnoDB",
+  "fields": [
+    {"fieldname": "branch_seq", "label": "Branch Seq", "fieldtype": "Int", "in_list_view": 1},
+    {"fieldname": "transaction_time", "label": "Transaction Time", "fieldtype": "Datetime", "in_list_view": 1},
+    {"fieldname": "valid_from", "label": "Valid From", "fieldtype": "Datetime", "in_list_view": 1},
+    {"fieldname": "valid_to", "label": "Valid To", "fieldtype": "Datetime", "in_list_view": 1},
+    {"fieldname": "date", "label": "Accounting Date", "fieldtype": "Date"},
+  {"fieldname": "journal_id", "label": "Journal ID", "fieldtype": "Data", "in_list_view": 1},
+  {"fieldname": "prior_tx_ref", "label": "Prior Tx Ref", "fieldtype": "Data"},
+  {"fieldname": "self_tx_ref", "label": "Self Tx Ref", "fieldtype": "Data"},
+    {"fieldname": "transaction_id", "label": "Transaction ID", "fieldtype": "Int"},
+    {"fieldname": "reason", "label": "Reason", "fieldtype": "Data", "in_list_view": 1},
+    {"fieldname": "worker", "label": "Worker", "fieldtype": "Data"},
+    {"fieldname": "company", "label": "Company", "fieldtype": "Data"},
+    {"fieldname": "country", "label": "Country", "fieldtype": "Data"},
+    {"fieldname": "action", "label": "Action", "fieldtype": "Data", "in_list_view": 1},
+  {"fieldname": "drcr", "label": "Dr/Cr", "fieldtype": "Select", "options": "dr\ncr", "in_list_view": 1},
+  {"fieldname": "amount", "label": "Amount", "fieldtype": "Currency", "in_list_view": 1},
+  {"fieldname": "currency", "label": "Currency", "fieldtype": "Data", "in_list_view": 1}
+  ]
+}
