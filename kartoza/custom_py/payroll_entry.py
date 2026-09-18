@@ -78,10 +78,10 @@ class CustomPayrollEntry(PayrollEntry):
 					i.custom_bank_account_currency = frappe.db.get_value("Account", account, "account_currency")
 
 			if not i.custom_payroll_payable_bank_account:
-				frappe.throw("Payroll Payable Bank Account not found for Employee:<a href='/app/employee/{0}'><b>{0}</b></a>".format(i.employee))
+				frappe.throw("Payroll Payable Bank Account not found for Employee:<a href='/desk/employee/{0}'><b>{0}</b></a>".format(i.employee))
 
 			if not i.custom_employee_type:
-				employees_without_employee_type += "<li><a href='/app/employee/{0}' target='_blank' >{0}: {1}</a></li>".format(i.employee, i.employee_name)
+				employees_without_employee_type += "<li><a href='/desk/employee/{0}' target='_blank' >{0}: {1}</a></li>".format(i.employee, i.employee_name)
 
 		if employees_without_employee_type:
 			frappe.throw("Employee Type not found for below Employees<br /><br /><ul>{0}</ul>".format(employees_without_employee_type))
@@ -153,7 +153,6 @@ class CustomPayrollEntry(PayrollEntry):
 					"end_date": self.end_date,
 					"company": self.company,
 					"posting_date": self.posting_date,
-					"deduct_tax_for_unclaimed_employee_benefits": self.deduct_tax_for_unclaimed_employee_benefits,
 					"deduct_tax_for_unsubmitted_tax_exemption_proof": self.deduct_tax_for_unsubmitted_tax_exemption_proof,
 					"payroll_entry": self.name,
 					"exchange_rate": self.exchange_rate,
@@ -256,33 +255,18 @@ class CustomPayrollEntry(PayrollEntry):
 					if is_bank_entry_created:
 						continue
 					for sal_detail in salary_slip.earnings:
-						(
-							is_flexible_benefit,
-							only_tax_impact,
-							create_separate_je,
-							statistical_component,
-						) = frappe.db.get_value(
-							"Salary Component",
-							sal_detail.salary_component,
-							[
-								"is_flexible_benefit",
-								"only_tax_impact",
-								"create_separate_payment_entry_against_benefit_claim",
-								"statistical_component",
-							],
+						statistical_component = frappe.db.get_value(
+							"Salary Component", sal_detail.salary_component, "statistical_component"
 						)
-						if only_tax_impact != 1 and statistical_component != 1:
-							if is_flexible_benefit == 1 and create_separate_je == 1:
-								self.create_journal_entry(sal_detail.amount, sal_detail.salary_component)
-							else:
-								if process_payroll_accounting_entry_based_on_employee:
-									self.set_employee_based_payroll_payable_entries(
-										"earnings",
-										salary_slip.employee,
-										sal_detail.amount,
-										salary_slip.salary_structure,
-									)
-								salary_slip_total += sal_detail.amount
+						if statistical_component != 1:
+							if process_payroll_accounting_entry_based_on_employee:
+								self.set_employee_based_payroll_payable_entries(
+									"earnings",
+									salary_slip.employee,
+									sal_detail.amount,
+									salary_slip.salary_structure,
+								)
+							salary_slip_total += sal_detail.amount
 
 					for sal_detail in salary_slip.deductions:
 						statistical_component = frappe.db.get_value(
@@ -517,9 +501,6 @@ class CustomPayrollEntry(PayrollEntry):
 			component_dict = {}
 
 			for item in salary_components:
-				if not self.should_add_component_to_accrual_jv(component_type, item):
-					continue
-
 				employee_cost_centers = self.get_payroll_cost_centers_for_employee(
 					item.employee, item.salary_structure
 				)
@@ -687,6 +668,8 @@ class CustomPayrollEntry(PayrollEntry):
 			)
 			journal_entry.company = self.company
 			journal_entry.posting_date = self.posting_date
+			# when party is not required, skip the validation in journal & gl entry
+			journal_entry.party_not_required = True if not employee_wise_accounting_enabled else False
 
 			journal_entry.set("accounts", accounts)
 			if len(currencies) > 1:
@@ -732,6 +715,8 @@ class CustomPayrollEntry(PayrollEntry):
 			)
 			journal_entry.company = self.company
 			journal_entry.posting_date = self.posting_date
+			# when party is not required, skip the validation in journal & gl entry
+			journal_entry.party_not_required = True if not employee_wise_accounting_enabled else False
 
 			journal_entry.set("accounts", accounts)
 			if len(currencies) > 1:
@@ -915,6 +900,10 @@ class CustomPayrollEntry(PayrollEntry):
 		journal_entry.company = self.company
 		journal_entry.posting_date = posting_date
 		journal_entry.multi_currency = multi_currency
+		# when party is not required, skip the validation in journal & gl entry
+		journal_entry.party_not_required = not frappe.db.get_single_value(
+			"Payroll Settings", "process_payroll_accounting_entry_based_on_employee"
+		)
 
 		if accounts:
 			journal_entry.set("accounts", accounts)

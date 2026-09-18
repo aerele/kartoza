@@ -63,7 +63,7 @@ frappe.ui.form.on("Payroll Entry", {
 										if (d.get_value(account)) {
 
 											$(".employee-list").append(`
-												<div class="col-sm-12" style="border-bottom: 1px solid #d4d4d4;"><b>Employees paid with <a href="/app/bank-account/${account}">${account}</a></b></div>
+												<div class="col-sm-12" style="border-bottom: 1px solid #d4d4d4;"><b>Employees paid with <a href="/desk/bank-account/${account}">${account}</a></b></div>
 											`);
 											account_map[account].forEach((row) => {
 												let is_disabled = false
@@ -78,7 +78,7 @@ frappe.ui.form.on("Payroll Entry", {
 												$(`.${row.employee}-col`).remove()
 
 												$(".employee-list").append(`
-													<div class="col-sm-6 ${row.employee}-col" style="border-bottom: 1px solid #d4d4d4;"><input type="checkbox" class="employee-checkbox" account="${account}" employee="${row.employee}" checked ${!is_disabled?"disabled":""}><a href="/app/employee/${row.employee}" target="_blank" >${row.employee}: ${row.employee_name}</a></div>
+													<div class="col-sm-6 ${row.employee}-col" style="border-bottom: 1px solid #d4d4d4;"><input type="checkbox" class="employee-checkbox" account="${account}" employee="${row.employee}" checked ${!is_disabled?"disabled":""}><a href="/desk/employee/${row.employee}" target="_blank" >${row.employee}: ${row.employee_name}</a></div>
 												`);
 											});
 										}

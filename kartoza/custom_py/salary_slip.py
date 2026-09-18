@@ -11,11 +11,8 @@ from frappe.utils import (
 	getdate,
 	month_diff,
 )
-from hrms.payroll.doctype.employee_benefit_application.employee_benefit_application import (
-	get_benefit_component_amount,
-)
-from hrms.payroll.doctype.employee_benefit_claim.employee_benefit_claim import (
-	get_benefit_claim_amount,
+from hrms.payroll.doctype.employee_benefit_ledger.employee_benefit_ledger import (
+	delete_employee_benefit_ledger_entry,
 )
 from hrms.payroll.doctype.payroll_period.payroll_period import (
 	get_period_factor,
@@ -214,31 +211,44 @@ class CustomSalarySlip(SalarySlip):
 			medical_aid = get_medical_aid(self, dependant)
 		return medical_aid
 
-	def calculate_component_amounts(self, component_type):
-		if not getattr(self, "_salary_structure_doc", None):
-			self.set_salary_structure_doc()
-
-		self.add_structure_components(component_type)
-		self.add_additional_salary_components(component_type)
-
-		if component_type == "earnings":
-			self.add_employee_benefits()
-		else:
-			self.add_tax_components()
-
 	def add_additional_salary_components(self, component_type):
 		additional_salaries = get_additional_salaries(
 			self.employee, self.start_date, self.end_date, component_type
 		)
 
 		for additional_salary in additional_salaries:
+			component_data = get_salary_component_data(additional_salary.component)
 			self.update_component_row(
-				get_salary_component_data(additional_salary.component),
+				component_data,
 				additional_salary.amount,
 				component_type,
 				additional_salary,
 				is_recurring=additional_salary.is_recurring,
 			)
+
+			if component_type == "earnings" and hasattr(self, "benefit_ledger_components"):
+				if (
+					additional_salary.ref_doctype == "Employee Benefit Claim"
+					and component_data.is_flexible_benefit
+				) or component_data.accrual_component:
+					# track benefit claim or accrual component payout to record in Employee Benefit Ledger
+					if additional_salary.ref_doctype == "Employee Benefit Claim":
+						remarks = f"Payout against Employee Benefit Claim {additional_salary.ref_docname}"
+						flexible_benefit = 1
+					else:
+						remarks = "Accrual Component payout via Additional Salary"
+						flexible_benefit = 0
+
+					self.benefit_ledger_components.append(
+						{
+							"salary_component": additional_salary.component,
+							"amount": additional_salary.amount,
+							"is_accrual": 0,
+							"transaction_type": "Payout",
+							"flexible_benefit": flexible_benefit,
+							"remarks": remarks,
+						}
+					)
 
 	def calculate_net_pay(self, skip_tax_breakup_computation: bool = False):
 		def set_gross_pay_and_base_gross_pay():
@@ -252,8 +262,6 @@ class CustomSalarySlip(SalarySlip):
 
 		# self.payroll_period = get_payroll_period(self.start_date, self.end_date, self.company)
 		self.set_forex_employee()
-		if self.salary_structure:
-			self.calculate_component_amounts("earnings")
 
 		# get remaining numbers of sub-period (period for which one salary is processed)
 		if self.payroll_period:
@@ -268,12 +276,16 @@ class CustomSalarySlip(SalarySlip):
 				relieving_date=self.relieving_date,
 			)[1]
 
+		# earnings are calculated after remaining_sub_periods since v16 benefit accruals depend on it
+		if self.salary_structure:
+			self.calculate_component_amounts("earnings")
+
 		set_gross_pay_and_base_gross_pay()
 
 		if self.salary_structure:
 			self.calculate_component_amounts("deductions")
 
-		set_loan_repayment()
+		set_loan_repayment(self)
 
 		self.set_precision_for_component_amounts()
 		self.set_net_pay()
@@ -418,42 +430,6 @@ class CustomSalarySlip(SalarySlip):
 				"current_tax_amount": self.current_tax_amount,
 			}
 		)
-
-	def add_employee_benefits(self):
-		for struct_row in self._salary_structure_doc.get("earnings"):
-			if struct_row.is_flexible_benefit == 1:
-				if (
-					frappe.db.get_value(
-						"Salary Component",
-						struct_row.salary_component,
-						"pay_against_benefit_claim",
-					)
-					!= 1
-				):
-					benefit_component_amount = get_benefit_component_amount(
-						self.employee,
-						self.start_date,
-						self.end_date,
-						struct_row.salary_component,
-						self._salary_structure_doc,
-						self.payroll_frequency,
-						self.payroll_period,
-					)
-					if benefit_component_amount:
-						self.update_component_row(
-							struct_row, benefit_component_amount, "earnings"
-						)
-				else:
-					benefit_claim_amount = get_benefit_claim_amount(
-						self.employee,
-						self.start_date,
-						self.end_date,
-						struct_row.salary_component,
-					)
-					if benefit_claim_amount:
-						self.update_component_row(
-							struct_row, benefit_claim_amount, "earnings"
-						)
 
 	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
 		taxable_income = super().get_taxable_earnings(
@@ -682,6 +658,8 @@ class CustomSalarySlip(SalarySlip):
 			"Employee ETI Log",
 			eti_logs,
 		)
+
+		delete_employee_benefit_ledger_entry("salary_slip", self.name)
 
 
 def get_retirement_annuity(self):
@@ -1001,6 +979,8 @@ def get_additional_salaries(employee, start_date, end_date, component_type):
 			additional_sal.is_recurring,
 			overwrite_field,
 			additional_sal.deduct_full_tax_on_selected_payroll_date,
+			additional_sal.ref_doctype,
+			additional_sal.ref_docname,
 		)
 		.where(
 			(additional_sal.employee == employee)

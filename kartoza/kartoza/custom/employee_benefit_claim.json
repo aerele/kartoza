@@ -32,7 +32,7 @@
    "in_list_view": 0,
    "in_preview": 0,
    "in_standard_filter": 0,
-   "insert_after": "pay_against_benefit_claim",
+   "insert_after": "max_amount_eligible",
    "label": "Kilometer",
    "length": 0,
    "mandatory_depends_on": null,
