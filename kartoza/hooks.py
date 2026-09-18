@@ -8,6 +8,7 @@ app_icon = "octicon octicon-file-directory"
 app_color = "grey"
 app_email = "kartoza@gmail.com"
 app_license = "MIT"
+required_apps = ["frappe/erpnext", "frappe/hrms"]
 
 
 fixtures = [
