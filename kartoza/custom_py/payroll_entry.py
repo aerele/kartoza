@@ -932,20 +932,3 @@ class CustomPayrollEntry(PayrollEntry):
 				employee_type = frappe.db.get_value("Employee", i.party, "custom_employee_type")
 				if employee_type:
 					frappe.db.set_value(i.doctype, i.name, 'employee_type', employee_type)
-
-
-
-
-
-
-
-def get_payroll_entry_bank_entries(payroll_entry_name):
-	journal_entries = frappe.db.sql(
-		'select jea.name from `tabJournal Entry Account` as jea join `tabJournal Entry` as je on je.name=jea.parent '
-		'where jea.reference_type="Payroll Entry" '
-		'and jea.reference_name=%s and je.docstatus=1 and je.voucher_type="Bank"',
-		payroll_entry_name,
-		as_dict=1
-	)
-
-	return journal_entries

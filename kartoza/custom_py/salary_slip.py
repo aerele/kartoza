@@ -11,9 +11,6 @@ from frappe.utils import (
 	getdate,
 	month_diff,
 )
-from hrms.payroll.doctype.employee_benefit_ledger.employee_benefit_ledger import (
-	delete_employee_benefit_ledger_entry,
-)
 from hrms.payroll.doctype.payroll_period.payroll_period import (
 	get_period_factor,
 )
@@ -90,7 +87,7 @@ class CustomSalarySlip(SalarySlip):
 	def add_tax_components(self):
 		# Calculate variable_based_on_taxable_salary after all components updated in salary slip
 		tax_components, self.other_deduction_components = [], []
-		for d in self._salary_structure_doc.get("deductions"):
+		for d in self._evaluated_components["deductions"]:
 			if (
 				d.variable_based_on_taxable_salary == 1
 				and not d.formula
@@ -218,6 +215,11 @@ class CustomSalarySlip(SalarySlip):
 
 		for additional_salary in additional_salaries:
 			component_data = get_salary_component_data(additional_salary.component)
+			remove_if_zero_valued = frappe.get_cached_value(
+				"Salary Component", additional_salary.component, "remove_if_zero_valued"
+			)
+			if flt(additional_salary.amount) == 0 and remove_if_zero_valued:
+				continue
 			self.update_component_row(
 				component_data,
 				additional_salary.amount,
@@ -286,6 +288,8 @@ class CustomSalarySlip(SalarySlip):
 			self.calculate_component_amounts("deductions")
 
 		set_loan_repayment(self)
+
+		self.apply_regional_deductions()
 
 		self.set_precision_for_component_amounts()
 		self.set_net_pay()
@@ -646,6 +650,10 @@ class CustomSalarySlip(SalarySlip):
 			eti_log.submit()
 
 	def on_cancel(self):
+		# base on_cancel handles status update, gratuity/leave-encashment revert,
+		# loan repayment reversal and Employee Benefit Ledger cleanup
+		super().on_cancel()
+
 		eti_logs = frappe.db.sql_list(
 			"""select name from `tabEmployee ETI Log` where against_salary_slip=%s """,
 			(self.name),
@@ -658,8 +666,6 @@ class CustomSalarySlip(SalarySlip):
 			"Employee ETI Log",
 			eti_logs,
 		)
-
-		delete_employee_benefit_ledger_entry("salary_slip", self.name)
 
 
 def get_retirement_annuity(self):
