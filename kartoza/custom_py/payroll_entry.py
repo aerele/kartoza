@@ -295,6 +295,7 @@ class CustomPayrollEntry(PayrollEntry):
 				salary_slip_total = 0
 				self.sdl_payment_amount = 0
 				self.provisional_payment = {}
+				contribution_employees = []
 				for salary_slip_name in salary_slip_name_list:
 					salary_slip = frappe.get_doc("Salary Slip", salary_slip_name[0])
 					is_company_contribution_created = frappe.db.get_value("Payroll Employee Detail", {"parent":self.name, "employee": salary_slip.employee}, "custom_is_company_contribution_created")
@@ -306,7 +307,7 @@ class CustomPayrollEntry(PayrollEntry):
 								)
 					if is_company_contribution_created:
 						continue
-
+					contribution_employees.append(salary_slip.employee)
 
 					department = frappe.db.get_value("Employee", salary_slip.employee, "department")
 					business_unit = None
@@ -348,8 +349,10 @@ class CustomPayrollEntry(PayrollEntry):
 
 				if salary_slip_total > 0 or self.sdl_payment_amount > 0:
 					self.jv_for_company_contribution = True
-					self.create_journal_entry(salary_slip_total, "Company Contribution")
+					journal_entry = self.create_journal_entry(salary_slip_total, "Company Contribution")
 					self.jv_for_company_contribution = False
+					if journal_entry:
+						self.mark_company_contribution_created(contribution_employees, journal_entry)
 
 		self.payment_account = payment_account
 		self.bank_account = bank_account
@@ -932,3 +935,19 @@ class CustomPayrollEntry(PayrollEntry):
 				employee_type = frappe.db.get_value("Employee", i.party, "custom_employee_type")
 				if employee_type:
 					frappe.db.set_value(i.doctype, i.name, 'employee_type', employee_type)
+
+		return journal_entry.name if accounts else None
+
+	def mark_company_contribution_created(self, employees, journal_entry):
+		# The contribution journal has no Employee party rows, so the per-employee
+		# flag cannot be derived from its accounts the way the salary flag is.
+		if not employees:
+			return
+
+		detail = frappe.qb.DocType("Payroll Employee Detail")
+		(
+			frappe.qb.update(detail)
+			.set(detail.custom_is_company_contribution_created, 1)
+			.set(detail.custom_company_contribution_journal_entry, journal_entry)
+			.where((detail.parent == self.name) & (detail.employee.isin(employees)))
+		).run()
