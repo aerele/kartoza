@@ -357,6 +357,12 @@ class CustomSalarySlip(SalarySlip):
 			self.payroll_period.start_date, self.start_date, tax_component
 		)
 
+		# the tax row is prorated by payment days, so the current period counts only as that share
+		payment_days_share = self.get_tax_payment_days_share(
+			tax_component, has_additional_salary_tax_component
+		)
+		remaining_sub_periods = self.remaining_sub_periods - 1 + payment_days_share
+
 		tax_rebate = self.get_tax_rebate()
 		medical_aid = self.get_medical_aid()
 		self.tax_rebate = tax_rebate
@@ -381,9 +387,7 @@ class CustomSalarySlip(SalarySlip):
 		if has_additional_salary_tax_component:
 			self.current_structured_tax_amount = self.additional_salary_amount
 		else:
-			self.current_structured_tax_amount = (
-				self.total_structured_tax_amount - self.previous_total_paid_taxes
-			) / self.remaining_sub_periods
+			self.current_structured_tax_amount = self.split_remaining_tax(remaining_sub_periods)
 		self.tax_value = self.current_structured_tax_amount
 
 		# Total taxable earnings with additional earnings with full tax
@@ -410,9 +414,7 @@ class CustomSalarySlip(SalarySlip):
 		if self.total_structured_tax_amount < 0:
 			self.total_structured_tax_amount = 0
 
-		self.current_structured_tax_amount = (
-			self.total_structured_tax_amount - self.previous_total_paid_taxes
-		) / self.remaining_sub_periods
+		self.current_structured_tax_amount = self.split_remaining_tax(remaining_sub_periods)
 
 		self.current_tax_amount = max(
 			0,
@@ -425,6 +427,15 @@ class CustomSalarySlip(SalarySlip):
 		if flt(self.current_tax_amount) < 0:
 			self.current_tax_amount = 0
 
+		# HRMS v16 reads this key in compute_income_tax_breakup / get_income_tax_deducted_till_date,
+		# so it must be the amount actually deducted on this slip. With an overwriting Additional Salary
+		# tax component the deduction row is the Additional Salary amount; otherwise the tax row is
+		# prorated by payment days.
+		if has_additional_salary_tax_component:
+			self.current_tax_amount_for_payment_days = max(0, flt(self.additional_salary_amount))
+		else:
+			self.current_tax_amount_for_payment_days = flt(self.current_tax_amount * payment_days_share)
+
 		self._component_based_variable_tax[tax_component].update(
 			{
 				"previous_total_paid_taxes": self.previous_total_paid_taxes,
@@ -432,8 +443,34 @@ class CustomSalarySlip(SalarySlip):
 				"current_structured_tax_amount": self.current_structured_tax_amount,
 				"full_tax_on_additional_earnings": self.full_tax_on_additional_earnings,
 				"current_tax_amount": self.current_tax_amount,
+				"current_tax_amount_for_payment_days": self.current_tax_amount_for_payment_days,
 			}
 		)
+
+	def split_remaining_tax(self, remaining_sub_periods):
+		if remaining_sub_periods <= 0:
+			return 0.0
+		return (self.total_structured_tax_amount - self.previous_total_paid_taxes) / remaining_sub_periods
+
+	def get_tax_payment_days_share(self, tax_component, has_additional_salary_tax_component):
+		# Mirrors hrms calculate_variable_tax (20aa58ee3); re-diff on HRMS upgrade. Uses flt, not
+		# upstream's cint, to match kartoza's get_amount_based_on_payment_days, which prorates the
+		# tax row with flt(total_working_days) (fractional with half-day holidays).
+		if has_additional_salary_tax_component or not flt(self.total_working_days):
+			return 1
+
+		tax_row = next(
+			(
+				d
+				for d in self.get("deductions")
+				if d.salary_component == tax_component and not d.additional_salary
+			),
+			None,
+		) or get_salary_component_data(tax_component)
+		if not cint(tax_row.depends_on_payment_days):
+			return 1
+
+		return flt(self.payment_days) / flt(self.total_working_days)
 
 	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
 		taxable_income = super().get_taxable_earnings(
@@ -448,10 +485,11 @@ class CustomSalarySlip(SalarySlip):
 			)
 			if reduce:
 				tax += i.amount - (i.amount * percent / 100)
-			if i.is_flexible_benefit:
-				taxable_income.flexi_benefits -= tax
-			else:
-				taxable_income.taxable_earnings -= tax
+			# HRMS v16 has no separate flexi_benefits total: a flexible benefit is counted in
+			# taxable_earnings only when it is tax applicable, so only then is there anything to reduce.
+			if i.is_flexible_benefit and not i.is_tax_applicable:
+				continue
+			taxable_income.taxable_earnings -= tax
 
 		self.taxable_value = taxable_income.taxable_earnings + taxable_income.additional_income
 		self.taxable_value_with_deduction = 0
