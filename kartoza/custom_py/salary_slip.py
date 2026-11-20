@@ -427,9 +427,14 @@ class CustomSalarySlip(SalarySlip):
 		if flt(self.current_tax_amount) < 0:
 			self.current_tax_amount = 0
 
-		# HRMS v16 reads this key in compute_income_tax_breakup / get_income_tax_deducted_till_date.
-		# The tax row is prorated by payment days, so this is the amount actually deducted.
-		self.current_tax_amount_for_payment_days = flt(self.current_tax_amount * payment_days_share)
+		# HRMS v16 reads this key in compute_income_tax_breakup / get_income_tax_deducted_till_date,
+		# so it must be the amount actually deducted on this slip. With an overwriting Additional Salary
+		# tax component the deduction row is the Additional Salary amount; otherwise the tax row is
+		# prorated by payment days.
+		if has_additional_salary_tax_component:
+			self.current_tax_amount_for_payment_days = max(0, flt(self.additional_salary_amount))
+		else:
+			self.current_tax_amount_for_payment_days = flt(self.current_tax_amount * payment_days_share)
 
 		self._component_based_variable_tax[tax_component].update(
 			{
@@ -448,7 +453,10 @@ class CustomSalarySlip(SalarySlip):
 		return (self.total_structured_tax_amount - self.previous_total_paid_taxes) / remaining_sub_periods
 
 	def get_tax_payment_days_share(self, tax_component, has_additional_salary_tax_component):
-		if has_additional_salary_tax_component or not cint(self.total_working_days):
+		# Mirrors hrms calculate_variable_tax (20aa58ee3); re-diff on HRMS upgrade. Uses flt, not
+		# upstream's cint, to match kartoza's get_amount_based_on_payment_days, which prorates the
+		# tax row with flt(total_working_days) (fractional with half-day holidays).
+		if has_additional_salary_tax_component or not flt(self.total_working_days):
 			return 1
 
 		tax_row = next(
@@ -462,7 +470,7 @@ class CustomSalarySlip(SalarySlip):
 		if not cint(tax_row.depends_on_payment_days):
 			return 1
 
-		return flt(self.payment_days) / cint(self.total_working_days)
+		return flt(self.payment_days) / flt(self.total_working_days)
 
 	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
 		taxable_income = super().get_taxable_earnings(

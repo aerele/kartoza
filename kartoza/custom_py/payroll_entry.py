@@ -130,7 +130,7 @@ class CustomPayrollEntry(PayrollEntry):
 		return self.get_employees_with_unmarked_attendance()
 
 
-	@frappe.whitelist()
+	@frappe.whitelist(methods=["POST"])
 	def create_salary_slips(self):
 		"""
 		Creates salary slip for selected employees if already not created
