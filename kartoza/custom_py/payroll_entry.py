@@ -507,18 +507,12 @@ class CustomPayrollEntry(PayrollEntry):
 				employee_cost_centers = self.get_payroll_cost_centers_for_employee(
 					item.employee, item.salary_structure
 				)
-				employee_advance = self.get_advance_deduction(component_type, item)
-
+				# Company Contribution rows never come from an Additional Salary, so unlike
+				# upstream get_salary_component_total there is no Employee Advance recovery here.
 				for cost_center, percentage in employee_cost_centers.items():
 					amount_against_cost_center = flt(item.amount) * percentage / 100
-
-					if employee_advance:
-						self.add_advance_deduction_entry(
-							item, amount_against_cost_center, cost_center, employee_advance
-						)
-					else:
-						key = (item.salary_component, cost_center)
-						component_dict[key] = component_dict.get(key, 0) + amount_against_cost_center
+					key = (item.salary_component, cost_center)
+					component_dict[key] = component_dict.get(key, 0) + amount_against_cost_center
 
 					if employee_wise_accounting_enabled:
 						self.set_employee_based_payroll_payable_entries(

@@ -425,6 +425,13 @@ class CustomSalarySlip(SalarySlip):
 		if flt(self.current_tax_amount) < 0:
 			self.current_tax_amount = 0
 
+		# HRMS v16 reads this key in compute_income_tax_breakup / get_income_tax_deducted_till_date.
+		# The tax row is prorated by payment days, so this is the amount actually deducted.
+		self.current_tax_amount_for_payment_days = flt(
+			self.current_tax_amount
+			* self.get_tax_payment_days_share(tax_component, has_additional_salary_tax_component)
+		)
+
 		self._component_based_variable_tax[tax_component].update(
 			{
 				"previous_total_paid_taxes": self.previous_total_paid_taxes,
@@ -432,8 +439,26 @@ class CustomSalarySlip(SalarySlip):
 				"current_structured_tax_amount": self.current_structured_tax_amount,
 				"full_tax_on_additional_earnings": self.full_tax_on_additional_earnings,
 				"current_tax_amount": self.current_tax_amount,
+				"current_tax_amount_for_payment_days": self.current_tax_amount_for_payment_days,
 			}
 		)
+
+	def get_tax_payment_days_share(self, tax_component, has_additional_salary_tax_component):
+		if has_additional_salary_tax_component or not cint(self.total_working_days):
+			return 1
+
+		tax_row = next(
+			(
+				d
+				for d in self.get("deductions")
+				if d.salary_component == tax_component and not d.additional_salary
+			),
+			None,
+		) or get_salary_component_data(tax_component)
+		if not cint(tax_row.depends_on_payment_days):
+			return 1
+
+		return flt(self.payment_days) / cint(self.total_working_days)
 
 	def get_taxable_earnings(self, allow_tax_exemption=False, based_on_payment_days=0):
 		taxable_income = super().get_taxable_earnings(
