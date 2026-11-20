@@ -357,6 +357,12 @@ class CustomSalarySlip(SalarySlip):
 			self.payroll_period.start_date, self.start_date, tax_component
 		)
 
+		# the tax row is prorated by payment days, so the current period counts only as that share
+		payment_days_share = self.get_tax_payment_days_share(
+			tax_component, has_additional_salary_tax_component
+		)
+		remaining_sub_periods = self.remaining_sub_periods - 1 + payment_days_share
+
 		tax_rebate = self.get_tax_rebate()
 		medical_aid = self.get_medical_aid()
 		self.tax_rebate = tax_rebate
@@ -381,9 +387,7 @@ class CustomSalarySlip(SalarySlip):
 		if has_additional_salary_tax_component:
 			self.current_structured_tax_amount = self.additional_salary_amount
 		else:
-			self.current_structured_tax_amount = (
-				self.total_structured_tax_amount - self.previous_total_paid_taxes
-			) / self.remaining_sub_periods
+			self.current_structured_tax_amount = self.split_remaining_tax(remaining_sub_periods)
 		self.tax_value = self.current_structured_tax_amount
 
 		# Total taxable earnings with additional earnings with full tax
@@ -410,9 +414,7 @@ class CustomSalarySlip(SalarySlip):
 		if self.total_structured_tax_amount < 0:
 			self.total_structured_tax_amount = 0
 
-		self.current_structured_tax_amount = (
-			self.total_structured_tax_amount - self.previous_total_paid_taxes
-		) / self.remaining_sub_periods
+		self.current_structured_tax_amount = self.split_remaining_tax(remaining_sub_periods)
 
 		self.current_tax_amount = max(
 			0,
@@ -427,10 +429,7 @@ class CustomSalarySlip(SalarySlip):
 
 		# HRMS v16 reads this key in compute_income_tax_breakup / get_income_tax_deducted_till_date.
 		# The tax row is prorated by payment days, so this is the amount actually deducted.
-		self.current_tax_amount_for_payment_days = flt(
-			self.current_tax_amount
-			* self.get_tax_payment_days_share(tax_component, has_additional_salary_tax_component)
-		)
+		self.current_tax_amount_for_payment_days = flt(self.current_tax_amount * payment_days_share)
 
 		self._component_based_variable_tax[tax_component].update(
 			{
@@ -442,6 +441,11 @@ class CustomSalarySlip(SalarySlip):
 				"current_tax_amount_for_payment_days": self.current_tax_amount_for_payment_days,
 			}
 		)
+
+	def split_remaining_tax(self, remaining_sub_periods):
+		if remaining_sub_periods <= 0:
+			return 0.0
+		return (self.total_structured_tax_amount - self.previous_total_paid_taxes) / remaining_sub_periods
 
 	def get_tax_payment_days_share(self, tax_component, has_additional_salary_tax_component):
 		if has_additional_salary_tax_component or not cint(self.total_working_days):
