@@ -105,6 +105,32 @@ class TestCustomSalarySlipTax(IntegrationTestCase):
 		tax = self.run_variable_tax(slip, has_additional_salary_tax_component=True)
 		self.assertEqual(tax["current_tax_amount_for_payment_days"], 500)
 
+	def taxable_earnings_with(self, earning, reduce_percent=None):
+		"""Run get_taxable_earnings on upstream taxable earnings of 5000 plus one extra earning row."""
+		slip = self.make_slip()
+		slip.append("earnings", earning)
+		component = (1, reduce_percent) if reduce_percent is not None else (0, 0)
+		upstream = frappe._dict(taxable_earnings=5000, additional_income=0)
+		with (
+			patch.object(SalarySlip, "get_taxable_earnings", return_value=upstream),
+			patch(f"{MODULE}.frappe.db.get_value", return_value=component),
+			patch(f"{MODULE}.get_retirement_annuity", return_value=None),
+		):
+			return slip.get_taxable_earnings().taxable_earnings
+
+	def test_non_taxable_flexible_benefit_does_not_reduce_taxable_earnings(self):
+		# used to raise TypeError: v16 has no flexi_benefits total (None -= 0)
+		earning = {"salary_component": "_Test Km", "amount": 620, "is_flexible_benefit": 1, "is_tax_applicable": 0}
+		self.assertEqual(self.taxable_earnings_with(earning, reduce_percent=80), 5000)
+
+	def test_taxable_flexible_benefit_reduces_taxable_earnings(self):
+		earning = {"salary_component": "_Test Km", "amount": 1000, "is_flexible_benefit": 1, "is_tax_applicable": 1}
+		self.assertEqual(self.taxable_earnings_with(earning, reduce_percent=80), 5000 - 200)
+
+	def test_reduced_component_reduces_taxable_earnings(self):
+		earning = {"salary_component": "_Test Allowance", "amount": 1000, "is_tax_applicable": 1}
+		self.assertEqual(self.taxable_earnings_with(earning, reduce_percent=80), 5000 - 200)
+
 	def test_writes_every_key_upstream_calculate_variable_tax_writes(self):
 		# HRMS reads these keys elsewhere (e.g. get_income_tax_deducted_till_date). kartoza replaces
 		# calculate_variable_tax entirely, so a key added upstream must be added here too.

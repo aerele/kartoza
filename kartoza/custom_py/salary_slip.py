@@ -485,10 +485,11 @@ class CustomSalarySlip(SalarySlip):
 			)
 			if reduce:
 				tax += i.amount - (i.amount * percent / 100)
-			if i.is_flexible_benefit:
-				taxable_income.flexi_benefits -= tax
-			else:
-				taxable_income.taxable_earnings -= tax
+			# HRMS v16 has no separate flexi_benefits total: a flexible benefit is counted in
+			# taxable_earnings only when it is tax applicable, so only then is there anything to reduce.
+			if i.is_flexible_benefit and not i.is_tax_applicable:
+				continue
+			taxable_income.taxable_earnings -= tax
 
 		self.taxable_value = taxable_income.taxable_earnings + taxable_income.additional_income
 		self.taxable_value_with_deduction = 0
